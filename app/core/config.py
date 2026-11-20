@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     # PENDING jobs older than this are assumed to have missed their publish
     # (e.g. Redis was down) and are re-published.
     pending_republish_after_seconds: int = 10
+    # QUEUED jobs older than this are re-published in case Redis lost the
+    # message (e.g. a crash without persistence). Duplicates are harmless: the
+    # guarded claim runs a job once. Keep this above the normal queue wait.
+    queued_republish_after_seconds: int = 300
+
+    # --- Live events (SSE) ------------------------------------------------------
+    sse_keepalive_seconds: float = 15.0
+    sse_queue_size: int = 1000
+
+    # --- Batches ----------------------------------------------------------------
+    max_batch_size: int = 500
 
     # --- Idempotency ----------------------------------------------------------
     idempotency_key_ttl_hours: int = 24

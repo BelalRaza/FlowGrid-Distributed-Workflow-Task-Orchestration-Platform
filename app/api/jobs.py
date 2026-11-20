@@ -8,8 +8,9 @@ from app.core.config import get_settings
 from app.db.models import ApiKey, JobStatus
 from app.db.session import get_db
 from app.schemas.job import AttemptRead, JobCreate, JobList, JobRead, JobStats, JobTypeInfo, WhoAmI
+from app.schemas.workflow import BatchCreate, BatchResult
 from app.services import jobs as jobs_service
-from app.services.jobs import IdempotencyConflictError, NotReplayableError, Publisher
+from app.services.jobs import BatchItemError, IdempotencyConflictError, NotReplayableError, Publisher
 from app.tasks.handlers import REGISTRY, InvalidPayloadError, UnknownJobTypeError
 
 # Every route here requires a valid API key and is rate limited per key.
@@ -75,6 +76,7 @@ def create_job(
             max_attempts=body.max_attempts,
             timeout_seconds=body.timeout_seconds,
             idempotency_key=idempotency_key,
+            run_at=body.resolved_run_at(),
         )
     except UnknownJobTypeError as exc:
         raise HTTPException(422, detail={"message": str(exc), "supported_types": sorted(REGISTRY)}) from exc
@@ -89,6 +91,30 @@ def create_job(
         response.status_code = status.HTTP_200_OK
         response.headers["Idempotent-Replayed"] = "true"
     return JobRead.from_model(result.job)
+
+
+@router.post(
+    "/jobs/batch",
+    response_model=BatchResult,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={422: {"description": "Any invalid item rejects the whole batch"}},
+)
+def create_jobs_batch(
+    body: BatchCreate,
+    api_key: ApiKey = Depends(require_client),
+    db: Session = Depends(get_db),
+    publish: Publisher = Depends(get_publisher),
+) -> BatchResult:
+    """Submit up to `MAX_BATCH_SIZE` jobs atomically (one transaction, one rate-limit token)."""
+    try:
+        jobs = jobs_service.submit_batch(db, [item.service_kwargs() for item in body.jobs], publish, api_key.id)
+    except BatchItemError as exc:
+        cause = exc.cause
+        detail = {"message": f"jobs[{exc.index}]: {cause}", "index": exc.index}
+        if isinstance(cause, InvalidPayloadError):
+            detail["errors"] = cause.errors
+        raise HTTPException(422, detail=detail) from exc
+    return BatchResult(count=len(jobs), job_ids=[j.id for j in jobs])
 
 
 # Declared before /jobs/{job_id} so "stats" is never parsed as a job ID.

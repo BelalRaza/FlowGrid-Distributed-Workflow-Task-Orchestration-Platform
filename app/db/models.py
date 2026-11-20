@@ -30,6 +30,13 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def as_utc(dt: datetime | None) -> datetime | None:
+    """SQLite returns naive datetimes; treat them as the UTC they were stored as."""
+    if dt is None or dt.tzinfo is not None:
+        return dt
+    return dt.replace(tzinfo=timezone.utc)
+
+
 def _tz():
     return mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -37,6 +44,8 @@ def _tz():
 class JobStatus(str, enum.Enum):
     """Lifecycle of a job.
 
+    SCHEDULED        -> delayed job; becomes PENDING at next_attempt_at (run_at)
+    BLOCKED          -> workflow step waiting for its dependencies to succeed
     PENDING          -> committed, not yet confirmed as published (outbox)
     QUEUED           -> message published to the broker
     RUNNING          -> claimed by a worker; protected by a lease
@@ -44,8 +53,11 @@ class JobStatus(str, enum.Enum):
     SUCCEEDED        -> handler returned a result                 (terminal)
     FAILED           -> permanent (non-retryable) error           (terminal)
     DEAD_LETTER      -> retryable error but attempts exhausted    (terminal)
+    CANCELLED        -> never ran: its workflow failed or was cancelled (terminal)
     """
 
+    SCHEDULED = "SCHEDULED"
+    BLOCKED = "BLOCKED"
     PENDING = "PENDING"
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
@@ -53,9 +65,13 @@ class JobStatus(str, enum.Enum):
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
     DEAD_LETTER = "DEAD_LETTER"
+    CANCELLED = "CANCELLED"
 
 
-TERMINAL_STATUSES = frozenset({JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.DEAD_LETTER})
+TERMINAL_STATUSES = frozenset(
+    {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.DEAD_LETTER, JobStatus.CANCELLED}
+)
+FAILED_STATUSES = frozenset({JobStatus.FAILED, JobStatus.DEAD_LETTER, JobStatus.CANCELLED})
 REPLAYABLE_STATUSES = frozenset({JobStatus.FAILED, JobStatus.DEAD_LETTER})
 
 
@@ -96,6 +112,10 @@ class Job(Base):
         Index("ix_jobs_status_next_attempt_at", "status", "next_attempt_at"),
         Index("ix_jobs_status_lease_expires_at", "status", "lease_expires_at"),
         Index("ix_jobs_api_key_id_created_at", "api_key_id", "created_at"),
+        Index("ix_jobs_status_queued_at", "status", "queued_at"),
+        UniqueConstraint("workflow_run_id", "step_id", name="uq_jobs_workflow_run_id_step_id"),
+        # One job per schedule tick, however many sweepers race to fire it.
+        UniqueConstraint("schedule_id", "scheduled_for", name="uq_jobs_schedule_id_scheduled_for"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -115,6 +135,16 @@ class Job(Base):
     replay_of: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True
     )
+    # Workflow membership (NULL for standalone jobs)
+    workflow_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("workflow_runs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    step_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Set when the job was created by a recurring schedule
+    schedule_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("schedules.id", ondelete="SET NULL"), nullable=True
+    )
+    scheduled_for: Mapped[datetime | None] = _tz()
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     queued_at: Mapped[datetime | None] = _tz()
@@ -199,3 +229,118 @@ class Notification(Base):
     job_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+# --------------------------------------------------------------------------- #
+# Phase 3: workflows (DAGs) and schedules
+# --------------------------------------------------------------------------- #
+
+
+class RunStatus(str, enum.Enum):
+    SCHEDULED = "SCHEDULED"  # run_at in the future; no step jobs exist yet
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class Workflow(Base):
+    """A named, validated DAG definition: {"steps": [{id, type, payload, depends_on, ...}]}."""
+
+    __tablename__ = "workflows"
+    __table_args__ = (Index("ix_workflows_api_key_id_created_at", "api_key_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    api_key_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("api_keys.id", ondelete="CASCADE"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    definition: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class WorkflowRun(Base):
+    __tablename__ = "workflow_runs"
+    __table_args__ = (
+        CheckConstraint(_in(RunStatus), name="status_valid"),
+        Index("ix_workflow_runs_api_key_id_created_at", "api_key_id", "created_at"),
+        Index("ix_workflow_runs_status_scheduled_for", "status", "scheduled_for"),
+        UniqueConstraint("schedule_id", "scheduled_for", name="uq_workflow_runs_schedule_id_scheduled_for"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    workflow_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    api_key_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("api_keys.id", ondelete="CASCADE"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default=RunStatus.RUNNING.value)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    schedule_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("schedules.id", ondelete="SET NULL"), nullable=True
+    )
+    scheduled_for: Mapped[datetime | None] = _tz()
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    started_at: Mapped[datetime | None] = _tz()
+    finished_at: Mapped[datetime | None] = _tz()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class JobDependency(Base):
+    """Edge in a workflow run's DAG: `job_id` may start only after `depends_on_job_id` succeeds."""
+
+    __tablename__ = "job_dependencies"
+    __table_args__ = (PrimaryKeyConstraint("job_id", "depends_on_job_id", name="pk_job_dependencies"),)
+
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
+    depends_on_job_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+
+class Schedule(Base):
+    """A recurring (cron) trigger for either a job or a workflow run."""
+
+    __tablename__ = "schedules"
+    __table_args__ = (
+        CheckConstraint("target_kind IN ('job', 'workflow')", name="target_kind_valid"),
+        CheckConstraint(
+            "(target_kind = 'job' AND job_type IS NOT NULL AND workflow_id IS NULL) OR "
+            "(target_kind = 'workflow' AND workflow_id IS NOT NULL AND job_type IS NULL)",
+            name="target_consistent",
+        ),
+        Index("ix_schedules_enabled_next_run_at", "enabled", "next_run_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    api_key_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("api_keys.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    cron: Mapped[str] = mapped_column(String(100), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    target_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    job_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+    max_attempts: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    timeout_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    workflow_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=True
+    )
+    next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_run_at: Mapped[datetime | None] = _tz()
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+# PostgreSQL triggers that emit a NOTIFY on every job / run status change (see
+# app/services/events.py). Attached here so `create_all` (tests) installs them
+# too; migration 0003 carries its own frozen copy.
+from app.db import triggers as _triggers  # noqa: E402
+
+_triggers.attach(Job.__table__, WorkflowRun.__table__)

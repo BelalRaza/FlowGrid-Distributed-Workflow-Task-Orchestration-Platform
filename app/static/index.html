@@ -7,23 +7,23 @@
 <style>
   :root {
     --bg: #f6f7f9; --panel: #ffffff; --border: #e3e6eb; --text: #1b1f24; --muted: #667080;
-    --accent: #2563eb; --accent-text: #ffffff; --code-bg: #f1f3f6;
+    --accent: #2563eb; --accent-text: #ffffff; --code-bg: #f1f3f6; --edge: #b6bcc6;
     --pending: #8a8f98; --queued: #b7791f; --running: #2563eb; --retry: #9333ea;
-    --succeeded: #15803d; --failed: #c2410c; --dead: #be123c;
+    --succeeded: #15803d; --failed: #c2410c; --dead: #be123c; --blocked: #64748b;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0f1216; --panel: #171b21; --border: #2a3039; --text: #e6e9ee; --muted: #9aa3b0;
-      --accent: #4f8cff; --accent-text: #0b0d10; --code-bg: #11151a;
+      --accent: #4f8cff; --accent-text: #0b0d10; --code-bg: #11151a; --edge: #4a5260;
       --pending: #9aa3b0; --queued: #e0a63a; --running: #4f8cff; --retry: #c084fc;
-      --succeeded: #34c27a; --failed: #ff7a45; --dead: #fb7185;
+      --succeeded: #34c27a; --failed: #ff7a45; --dead: #fb7185; --blocked: #94a3b8;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-           padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
+           padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
   header h1 { margin: 0; font-size: 18px; letter-spacing: -0.01em; }
   header h1 span { color: var(--muted); font-weight: 400; }
   .hdr-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
@@ -31,28 +31,33 @@
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--pending); }
   .dot.ok { background: var(--succeeded); } .dot.bad { background: var(--failed); }
   .auth { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
-  .auth input { width: 230px; }
-  main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 40px; display: grid; gap: 16px; }
+  .auth input { width: 220px; }
+  nav.tabs { display: flex; gap: 4px; padding: 0 24px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  nav.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 10px 14px; color: var(--muted); }
+  nav.tabs button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  main { max-width: 1280px; margin: 0 auto; padding: 18px 16px 40px; display: grid; gap: 16px; }
   .banner { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent);
             border-radius: 8px; padding: 12px 14px; }
-  .banner code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
   .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
-  .stat .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
-  .stat .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .label { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat .value { font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .grid { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
-  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .auth input { width: 160px; } }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .auth input { width: 150px; } }
   .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
   .panel h2 { margin: 0 0 12px; font-size: 15px; }
+  .panel h3 { margin: 16px 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
   label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
   select, textarea, input { width: 100%; font: inherit; color: var(--text); background: var(--bg);
                             border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; }
-  textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; min-height: 130px; resize: vertical; }
+  textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; min-height: 130px; resize: vertical; }
   .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
   .row { display: flex; gap: 8px; align-items: end; } .row > div { flex: 1; }
   button { font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text);
-           border-radius: 6px; padding: 7px 12px; cursor: pointer; white-space: nowrap; }
+           border-radius: 6px; padding: 6px 11px; cursor: pointer; white-space: nowrap; }
   button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button.small { padding: 3px 8px; font-size: 12px; }
   button:disabled { opacity: .5; cursor: default; }
   .msg { margin-top: 10px; font-size: 13px; min-height: 1.2em; word-break: break-word; }
   .msg.err { color: var(--failed); } .msg.ok { color: var(--succeeded); }
@@ -62,25 +67,35 @@
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
   th { color: var(--muted); font-weight: 500; font-size: 12px; }
-  #jobs-body tr { cursor: pointer; } #jobs-body tr:hover { background: var(--bg); }
-  #jobs-body tr.selected { background: var(--code-bg); }
+  tr.clickable { cursor: pointer; } tr.clickable:hover { background: var(--bg); }
+  tr.selected { background: var(--code-bg); }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid currentColor; }
-  .s-PENDING { color: var(--pending); } .s-QUEUED { color: var(--queued); } .s-RUNNING { color: var(--running); }
-  .s-RETRY_SCHEDULED { color: var(--retry); } .s-SUCCEEDED { color: var(--succeeded); }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid currentColor; }
+  .s-PENDING, .s-SCHEDULED { color: var(--pending); } .s-QUEUED { color: var(--queued); } .s-RUNNING { color: var(--running); }
+  .s-RETRY_SCHEDULED { color: var(--retry); } .s-SUCCEEDED { color: var(--succeeded); } .s-BLOCKED, .s-CANCELLED { color: var(--blocked); }
   .s-FAILED, .s-TIMED_OUT { color: var(--failed); } .s-DEAD_LETTER, .s-LOST { color: var(--dead); }
   .pager { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: var(--muted); font-size: 12.5px; }
-  .empty { color: var(--muted); text-align: center; padding: 24px; }
+  .empty { color: var(--muted); text-align: center; padding: 20px; }
   pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px;
-        overflow: auto; font-size: 12px; margin: 4px 0 12px; max-height: 240px; white-space: pre-wrap; }
+        overflow: auto; font-size: 12px; margin: 4px 0 12px; max-height: 220px; white-space: pre-wrap; }
   dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 12px; font-size: 13px; }
   dt { color: var(--muted); } dd { margin: 0; word-break: break-all; }
-  .detail-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .live { font-size: 12px; color: var(--muted); }
+  .dag { position: relative; display: flex; gap: 56px; padding: 12px 4px; overflow-x: auto; }
+  .dag svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+  .dag-col { display: flex; flex-direction: column; justify-content: center; gap: 14px; z-index: 1; }
+  .node { min-width: 150px; background: var(--panel); border: 1.5px solid currentColor; border-radius: 8px; padding: 8px 10px; }
+  .node .id { font-weight: 600; color: var(--text); }
+  .node .meta { font-size: 11.5px; color: var(--muted); }
+  .wf-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .wf-list { list-style: none; padding: 0; margin: 0; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <header>
-  <h1>FlowGrid <span>· Job dashboard</span></h1>
+  <h1>FlowGrid <span>· Dashboard</span></h1>
   <div class="hdr-right">
     <form class="auth" id="auth-form">
       <span id="whoami">API key</span>
@@ -88,11 +103,17 @@
       <button type="submit">Use key</button>
     </form>
     <div class="health">
+      <span title="Live updates via Server-Sent Events"><i class="dot" id="h-live"></i>Live</span>
       <span><i class="dot" id="h-db"></i>PostgreSQL</span>
       <span><i class="dot" id="h-redis"></i>Redis</span>
     </div>
   </div>
 </header>
+<nav class="tabs">
+  <button data-tab="jobs" class="active">Jobs</button>
+  <button data-tab="workflows">Workflows</button>
+  <button data-tab="schedules">Schedules</button>
+</nav>
 
 <main>
   <div class="banner" id="auth-banner" hidden>
@@ -100,69 +121,138 @@
     It is kept only in this browser's local storage.
   </div>
 
-  <section class="stats" id="stats"></section>
-
-  <div class="grid">
-    <section class="panel">
-      <h2>Submit a job</h2>
-      <form id="submit-form">
-        <label for="job-type">Job type</label>
-        <select id="job-type"></select>
-        <p class="hint" id="job-desc"></p>
-        <label for="payload">Payload (JSON)</label>
-        <textarea id="payload" spellcheck="false"></textarea>
-        <div class="row">
-          <div><label for="max-attempts">Max attempts</label><input id="max-attempts" type="number" min="1" max="10" placeholder="3" /></div>
-          <div><label for="timeout">Timeout (s)</label><input id="timeout" type="number" min="1" max="600" placeholder="default" /></div>
+  <!-- ============================ JOBS ============================ -->
+  <section data-view="jobs">
+    <section class="stats" id="stats"></section>
+    <div class="grid" style="margin-top:16px">
+      <section class="panel">
+        <h2>Submit a job</h2>
+        <form id="submit-form">
+          <label for="job-type">Job type</label>
+          <select id="job-type"></select>
+          <p class="hint" id="job-desc"></p>
+          <label for="payload">Payload (JSON)</label>
+          <textarea id="payload" spellcheck="false"></textarea>
+          <div class="row">
+            <div><label for="max-attempts">Max attempts</label><input id="max-attempts" type="number" min="1" max="10" placeholder="3" /></div>
+            <div><label for="timeout">Timeout (s)</label><input id="timeout" type="number" min="1" max="600" placeholder="default" /></div>
+            <div><label for="delay">Delay (s)</label><input id="delay" type="number" min="1" placeholder="now" /></div>
+          </div>
+          <label for="idem">Idempotency-Key (optional)</label>
+          <input id="idem" placeholder="e.g. invoice-42" maxlength="255" />
+          <div class="row">
+            <div style="flex:0 0 80px"><label for="count">Copies</label><input id="count" type="number" min="1" max="500" value="1" /></div>
+            <button class="primary" type="submit" id="submit-btn" style="flex:1">Submit</button>
+          </div>
+          <div class="msg" id="submit-msg"></div>
+        </form>
+      </section>
+      <section class="panel">
+        <div class="toolbar">
+          <h2 style="margin:0">Jobs</h2>
+          <select id="status-filter" aria-label="Filter by status"><option value="">All statuses</option></select>
         </div>
-        <label for="idem">Idempotency-Key (optional)</label>
-        <input id="idem" placeholder="e.g. invoice-42" maxlength="255" />
-        <div class="row">
-          <div style="flex:0 0 80px"><label for="count">Copies</label><input id="count" type="number" min="1" max="50" value="1" /></div>
-          <button class="primary" type="submit" id="submit-btn" style="flex:1">Submit</button>
-        </div>
-        <div class="msg" id="submit-msg"></div>
-      </form>
-    </section>
-
-    <section class="panel">
-      <div class="toolbar">
-        <h2 style="margin:0">Jobs</h2>
-        <select id="status-filter" aria-label="Filter by status"><option value="">All statuses</option></select>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Job ID</th><th>Type</th><th>Status</th><th>Attempts</th><th>Created</th><th>Duration</th><th>Worker</th></tr></thead>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Job ID</th><th>Type</th><th>Status</th><th>Attempts</th><th>Origin</th><th>Created</th><th>Duration</th><th>Worker</th></tr></thead>
           <tbody id="jobs-body"></tbody>
-        </table>
-      </div>
-      <div class="pager">
-        <span id="pager-info"></span>
-        <span><button id="prev">← Prev</button> <button id="next">Next →</button></span>
-      </div>
+        </table></div>
+        <div class="pager"><span id="pager-info"></span>
+          <span><button id="prev">← Prev</button> <button id="next">Next →</button></span></div>
+      </section>
+    </div>
+    <section class="panel" id="detail" hidden style="margin-top:16px">
+      <div class="head"><h2 style="margin:0">Job detail</h2><span id="detail-actions"></span></div>
+      <div id="detail-body"></div>
     </section>
-  </div>
+  </section>
 
-  <section class="panel" id="detail" hidden>
-    <div class="detail-head"><h2 style="margin:0">Job detail</h2><span id="detail-actions"></span></div>
-    <div id="detail-body"></div>
+  <!-- ========================== WORKFLOWS ========================= -->
+  <section data-view="workflows" hidden>
+    <div class="grid">
+      <section class="panel">
+        <h2>Create a workflow</h2>
+        <p class="hint">Steps are allow-listed job types; <code>depends_on</code> lists step IDs that must succeed first.</p>
+        <label for="wf-def">Definition (JSON)</label>
+        <textarea id="wf-def" spellcheck="false" style="min-height:260px"></textarea>
+        <button class="primary" id="wf-create" style="width:100%;margin-top:8px">Create workflow</button>
+        <div class="msg" id="wf-msg"></div>
+        <h3>Workflows</h3>
+        <ul class="wf-list" id="wf-list"></ul>
+      </section>
+      <section class="panel">
+        <div class="toolbar">
+          <h2 style="margin:0">Runs</h2>
+          <select id="run-filter" aria-label="Filter runs"><option value="">All statuses</option>
+            <option>SCHEDULED</option><option>RUNNING</option><option>SUCCEEDED</option><option>FAILED</option><option>CANCELLED</option></select>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Run</th><th>Workflow</th><th>Status</th><th>Origin</th><th>Created</th><th>Duration</th></tr></thead>
+          <tbody id="runs-body"></tbody>
+        </table></div>
+      </section>
+    </div>
+    <section class="panel" id="run-detail" hidden style="margin-top:16px">
+      <div class="head"><h2 style="margin:0" id="run-title">Run</h2><span id="run-actions"></span></div>
+      <p class="hint" id="run-meta"></p>
+      <div class="dag" id="dag"></div>
+      <div id="run-steps"></div>
+    </section>
+  </section>
+
+  <!-- ========================== SCHEDULES ========================= -->
+  <section data-view="schedules" hidden>
+    <div class="grid">
+      <section class="panel">
+        <h2>New schedule</h2>
+        <label for="sc-name">Name</label><input id="sc-name" value="every-5-minutes" maxlength="100" />
+        <label for="sc-cron">Cron (5 fields, UTC)</label><input id="sc-cron" value="*/5 * * * *" />
+        <p class="hint">e.g. <code>*/5 * * * *</code> every 5 min · <code>0 3 * * *</code> daily 03:00 · <code>0 * * * 1-5</code> hourly on weekdays</p>
+        <label for="sc-kind">Target</label>
+        <select id="sc-kind"><option value="job">A job</option><option value="workflow">A workflow run</option></select>
+        <div id="sc-job">
+          <label for="sc-type">Job type</label><select id="sc-type"></select>
+          <label for="sc-payload">Payload (JSON)</label><textarea id="sc-payload" spellcheck="false" style="min-height:80px"></textarea>
+        </div>
+        <div id="sc-wf" hidden><label for="sc-workflow">Workflow</label><select id="sc-workflow"></select></div>
+        <button class="primary" id="sc-create" style="width:100%;margin-top:10px">Create schedule</button>
+        <div class="msg" id="sc-msg"></div>
+      </section>
+      <section class="panel">
+        <h2>Schedules</h2>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Name</th><th>Cron</th><th>Target</th><th>Next run</th><th>Last run</th><th>State</th><th></th></tr></thead>
+          <tbody id="sc-body"></tbody>
+        </table></div>
+      </section>
+    </div>
   </section>
 </main>
 
 <script>
 const PAGE = 15;
-const STATUSES = ["PENDING", "QUEUED", "RUNNING", "RETRY_SCHEDULED", "SUCCEEDED", "FAILED", "DEAD_LETTER"];
-const KEY_STORE = "flowgrid.apiKey";
-let jobTypes = [], offset = 0, selectedId = null, apiKey = "";
+const STATUSES = ["SCHEDULED", "BLOCKED", "PENDING", "QUEUED", "RUNNING", "RETRY_SCHEDULED", "SUCCEEDED", "FAILED", "DEAD_LETTER", "CANCELLED"];
+const KEY_STORE = "flowgrid.apiKey", TAB_STORE = "flowgrid.tab";
+const EXAMPLE_WF = {
+  name: "nightly-import",
+  steps: [
+    { id: "extract", type: "echo", payload: { message: "start" } },
+    { id: "batch_a", type: "process_records", depends_on: ["extract"], payload: { batch_id: "a", record_ids: [1, 2, 3], delay_ms: 300 } },
+    { id: "batch_b", type: "process_records", depends_on: ["extract"], payload: { batch_id: "b", record_ids: [4, 5], delay_ms: 500 } },
+    { id: "report", type: "summarize", depends_on: ["batch_a", "batch_b"], payload: { title: "nightly" } },
+  ],
+};
+let jobTypes = [], workflows = [], offset = 0, selectedJob = null, selectedRun = null, apiKey = "", tab = "jobs", live = false;
 const $ = (id) => document.getElementById(id);
-
-try { apiKey = localStorage.getItem(KEY_STORE) || ""; } catch {}
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+apiKey = store.get(KEY_STORE) || "";
 
 async function api(path, opts = {}) {
   const headers = { ...(opts.headers || {}) };
   if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+  if (opts.json !== undefined) { headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(opts.json); }
   const res = await fetch(path, { ...opts, headers });
-  const body = await res.json().catch(() => null);
+  const body = res.status === 204 ? null : await res.json().catch(() => null);
   if (res.status === 401) showAuthNeeded();
   if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status, body });
   return { body, res };
@@ -171,25 +261,33 @@ async function api(path, opts = {}) {
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
+    if (v == null) continue;
     if (k === "class") node.className = v; else if (k.startsWith("on")) node.addEventListener(k.slice(2), v); else node.setAttribute(k, v);
   }
   for (const c of children) node.append(c ?? "");
   return node;
 }
-
-const badge = (s) => el("span", { class: `badge s-${s}` }, s.replace("_", " "));
+const badge = (s) => el("span", { class: `badge s-${s}` }, s.replaceAll("_", " "));
 const fmtTime = (t) => t ? new Date(t).toLocaleTimeString() : "—";
+const fmtDate = (t) => t ? new Date(t).toLocaleString() : "—";
 const fmtDur = (ms) => ms == null ? "—" : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
 const errText = (err) => {
   const d = err.body?.detail;
-  if (err.status === 429) return "Rate limited — slow down and try again shortly.";
+  if (err.status === 429) return "Rate limited — try again shortly.";
   if (typeof d === "string") return d;
-  if (d?.errors) return `${d.message}: ` + d.errors.map((x) => `${x.loc.join(".") || "payload"} — ${x.msg}`).join("; ");
+  if (Array.isArray(d)) return d.map((x) => `${x.loc.slice(1).join(".")}: ${x.msg}`).join("; ");
+  if (d?.errors) return `${d.message}: ` + d.errors.map((x) => `${(x.loc || []).join(".") || "payload"} — ${x.msg}`).join("; ");
   return d?.message ?? err.message;
 };
+const setMsg = (id, text, ok) => { $(id).className = "msg " + (ok ? "ok" : "err"); $(id).textContent = text; };
+function showAuthNeeded() {
+  // A 401 means the stored key is invalid or revoked: forget it, so polling
+  // and the SSE reconnect loop stop instead of retrying a dead key forever.
+  apiKey = ""; store.set(KEY_STORE, "");
+  $("auth-banner").hidden = false; $("whoami").textContent = "API key"; setLive(false);
+}
 
-function showAuthNeeded() { $("auth-banner").hidden = false; $("whoami").textContent = "API key"; }
-
+// ------------------------------------------------------------- auth & setup
 async function loadMe() {
   if (!apiKey) return showAuthNeeded();
   try {
@@ -202,144 +300,270 @@ async function loadMe() {
 }
 
 async function loadJobTypes() {
-  try {
-    ({ body: jobTypes } = await api("/api/v1/job-types"));
-  } catch { return; }
-  $("job-type").replaceChildren(...jobTypes.map((t) => el("option", { value: t.name }, t.name)));
-  onTypeChange();
+  try { ({ body: jobTypes } = await api("/api/v1/job-types")); } catch { return; }
+  for (const sel of [$("job-type"), $("sc-type")]) sel.replaceChildren(...jobTypes.map((t) => el("option", { value: t.name }, t.name)));
+  onTypeChange(); onScheduleTypeChange();
 }
-
 function onTypeChange() {
-  const t = jobTypes.find((x) => x.name === $("job-type").value);
-  if (!t) return;
+  const t = jobTypes.find((x) => x.name === $("job-type").value); if (!t) return;
   $("job-desc").textContent = `${t.description} (default timeout ${t.default_timeout_seconds}s)`;
   $("payload").value = JSON.stringify(t.example, null, 2);
 }
+function onScheduleTypeChange() {
+  const t = jobTypes.find((x) => x.name === $("sc-type").value); if (t) $("sc-payload").value = JSON.stringify(t.example, null, 2);
+}
 
+// ------------------------------------------------------------- live events
+// EventSource cannot send an Authorization header, and putting the API key
+// in the URL would leak it into logs and history. fetch() can stream the
+// response body, so we parse the SSE frames ourselves.
+let refreshTimer = null;
+function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, 200); }
+function setLive(on) { live = on; $("h-live").className = "dot " + (on ? "ok" : "bad"); }
+async function connectEvents() {
+  if (!apiKey) return;
+  try {
+    const res = await fetch("/api/v1/events", { headers: { Authorization: `Bearer ${apiKey}` } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    setLive(true);
+    const reader = res.body.getReader(), decoder = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const frame = buf.slice(0, i); buf = buf.slice(i + 2);
+        const kind = frame.split("\n").find((l) => l.startsWith("event: "))?.slice(7);
+        if (kind === "revoked") { showAuthNeeded(); return; }
+        if (kind && kind !== "ready") scheduleRefresh();
+      }
+    }
+  } catch (e) { /* fall through to reconnect */ }
+  setLive(false);
+  setTimeout(connectEvents, 3000);
+}
+
+// ------------------------------------------------------------- jobs tab
 async function submitJob(e) {
   e.preventDefault();
-  const msg = $("submit-msg"); msg.className = "msg"; msg.textContent = "";
   let payload;
-  try { payload = JSON.parse($("payload").value || "{}"); }
-  catch { msg.className = "msg err"; msg.textContent = "Payload is not valid JSON."; return; }
-  const body = { type: $("job-type").value, payload };
-  if ($("max-attempts").value) body.max_attempts = parseInt($("max-attempts").value, 10);
-  if ($("timeout").value) body.timeout_seconds = parseInt($("timeout").value, 10);
-  const headers = { "Content-Type": "application/json" };
-  if ($("idem").value.trim()) headers["Idempotency-Key"] = $("idem").value.trim();
-  const count = Math.min(50, Math.max(1, parseInt($("count").value, 10) || 1));
-
+  try { payload = JSON.parse($("payload").value || "{}"); } catch { return setMsg("submit-msg", "Payload is not valid JSON."); }
+  const job = { type: $("job-type").value, payload };
+  if ($("max-attempts").value) job.max_attempts = +$("max-attempts").value;
+  if ($("timeout").value) job.timeout_seconds = +$("timeout").value;
+  if ($("delay").value) job.delay_seconds = +$("delay").value;
+  const count = Math.min(500, Math.max(1, parseInt($("count").value, 10) || 1));
   $("submit-btn").disabled = true;
   try {
-    let last, replayed = false;
-    for (let i = 0; i < count; i++) {
-      const r = await api("/api/v1/jobs", { method: "POST", headers, body: JSON.stringify(body) });
-      last = r.body; replayed = r.res.headers.get("Idempotent-Replayed") === "true";
+    if (count > 1) {
+      const { body } = await api("/api/v1/jobs/batch", { method: "POST", json: { jobs: Array(count).fill(job) } });
+      setMsg("submit-msg", `Accepted ${body.count} jobs in one batch.`, true);
+    } else {
+      const headers = $("idem").value.trim() ? { "Idempotency-Key": $("idem").value.trim() } : {};
+      const { body, res } = await api("/api/v1/jobs", { method: "POST", json: job, headers });
+      setMsg("submit-msg", res.headers.get("Idempotent-Replayed") === "true"
+        ? `Idempotent replay: existing job ${body.job_id.slice(0, 8)}…` : `Accepted job ${body.job_id.slice(0, 8)}… (${body.status})`, true);
+      selectedJob = body.job_id;
     }
-    msg.className = "msg ok";
-    msg.textContent = replayed ? `Idempotent replay: returned existing job ${last.job_id.slice(0, 8)}…`
-      : count === 1 ? `Accepted job ${last.job_id.slice(0, 8)}… (${last.status})` : `Accepted ${count} jobs.`;
-    selectedId = last.job_id; offset = 0;
-    refresh();
-  } catch (err) {
-    msg.className = "msg err"; msg.textContent = errText(err);
-  } finally { $("submit-btn").disabled = false; }
+    offset = 0; refresh();
+  } catch (err) { setMsg("submit-msg", errText(err)); } finally { $("submit-btn").disabled = false; }
 }
 
 async function loadStats() {
   const { body: s } = await api("/api/v1/jobs/stats");
   const cards = [["Total", s.total], ...STATUSES.map((k) => [k, s.by_status[k] ?? 0])];
-  $("stats").replaceChildren(...cards.map(([label, value]) =>
-    el("div", { class: "stat" }, el("div", { class: `label ${label === "Total" ? "" : "s-" + label}` }, label.replace("_", " ")),
-      el("div", { class: "value" }, String(value)))));
+  $("stats").replaceChildren(...cards.map(([label, value]) => el("div", { class: "stat" },
+    el("div", { class: `label ${label === "Total" ? "" : "s-" + label}` }, label.replaceAll("_", " ")), el("div", { class: "value" }, String(value)))));
 }
+
+const origin = (j) => j.workflow_run_id ? `step ${j.step_id}` : j.schedule_id ? "schedule" : j.replay_of ? "replay" : "api";
 
 async function loadJobs() {
-  const status = $("status-filter").value;
   const q = new URLSearchParams({ limit: PAGE, offset });
-  if (status) q.set("status", status);
+  if ($("status-filter").value) q.set("status", $("status-filter").value);
   const { body: data } = await api(`/api/v1/jobs?${q}`);
-  const body = $("jobs-body");
-  if (!data.items.length) {
-    body.replaceChildren(el("tr", {}, el("td", { colspan: 7, class: "empty" }, "No jobs yet — submit one on the left.")));
-  } else {
-    body.replaceChildren(...data.items.map((j) => el("tr", {
-        class: j.job_id === selectedId ? "selected" : "",
-        onclick: () => { selectedId = j.job_id; refresh(); },
-      },
-      el("td", { class: "mono" }, j.job_id.slice(0, 8)), el("td", {}, j.type), el("td", {}, badge(j.status)),
-      el("td", {}, `${j.attempts}/${j.max_attempts}`), el("td", {}, fmtTime(j.created_at)), el("td", {}, fmtDur(j.duration_ms)),
-      el("td", { class: "mono" }, j.worker_id ?? "—"))));
-  }
+  $("jobs-body").replaceChildren(...(data.items.length ? data.items.map((j) => el("tr", {
+      class: "clickable" + (j.job_id === selectedJob ? " selected" : ""), onclick: () => { selectedJob = j.job_id; refresh(); } },
+    el("td", { class: "mono" }, j.job_id.slice(0, 8)), el("td", {}, j.type), el("td", {}, badge(j.status)),
+    el("td", {}, `${j.attempts}/${j.max_attempts}`), el("td", {}, origin(j)), el("td", {}, fmtTime(j.created_at)),
+    el("td", {}, fmtDur(j.duration_ms)), el("td", { class: "mono" }, j.worker_id ?? "—")))
+    : [el("tr", {}, el("td", { colspan: 8, class: "empty" }, "No jobs yet — submit one on the left."))]));
   const end = Math.min(offset + PAGE, data.total);
   $("pager-info").textContent = data.total ? `${offset + 1}–${end} of ${data.total}` : "";
-  $("prev").disabled = offset === 0;
-  $("next").disabled = end >= data.total;
+  $("prev").disabled = offset === 0; $("next").disabled = end >= data.total;
 }
 
-async function replay(jobId) {
-  try {
-    const { body } = await api(`/api/v1/jobs/${jobId}/replay`, { method: "POST" });
-    selectedId = body.job_id; offset = 0; refresh();
-  } catch (err) { alert(errText(err)); }
-}
-
-async function loadDetail() {
-  if (!selectedId) return;
-  const [{ body: j }, { body: attempts }] = await Promise.all([
-    api(`/api/v1/jobs/${selectedId}`), api(`/api/v1/jobs/${selectedId}/attempts`)]);
-  const rows = [["Job ID", j.job_id], ["Type", j.type], ["Status", badge(j.status)],
-    ["Attempts", `${j.attempts} of ${j.max_attempts}`], ["Timeout", `${j.timeout_seconds}s per attempt`],
-    ["Worker", j.worker_id ?? "—"], ["Created", j.created_at], ["Started", j.started_at ?? "—"],
-    ["Finished", j.finished_at ?? "—"], ["Duration", fmtDur(j.duration_ms)]];
-  if (j.next_attempt_at) rows.push(["Next attempt", j.next_attempt_at]);
-  if (j.replay_of) rows.push(["Replay of", j.replay_of]);
+async function loadJobDetail() {
+  if (!selectedJob) return;
+  const [{ body: j }, { body: attempts }] = await Promise.all([api(`/api/v1/jobs/${selectedJob}`), api(`/api/v1/jobs/${selectedJob}/attempts`)]);
+  const rows = [["Job ID", j.job_id], ["Type", j.type], ["Status", badge(j.status)], ["Attempts", `${j.attempts} of ${j.max_attempts}`],
+    ["Timeout", `${j.timeout_seconds}s per attempt`], ["Origin", origin(j)], ["Worker", j.worker_id ?? "—"], ["Created", j.created_at],
+    ["Started", j.started_at ?? "—"], ["Finished", j.finished_at ?? "—"], ["Duration", fmtDur(j.duration_ms)]];
+  if (j.next_attempt_at) rows.push([j.status === "SCHEDULED" ? "Runs at" : "Next attempt", j.next_attempt_at]);
   const parts = [el("dl", {}, ...rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", { class: "mono" }, v)]))];
-  if (attempts.length) {
-    parts.push(el("label", {}, "Attempt history"), el("div", { class: "table-wrap" }, el("table", {},
-      el("thead", {}, el("tr", {}, ...["#", "Status", "Worker", "Duration", "Error"].map((h) => el("th", {}, h)))),
-      el("tbody", {}, ...attempts.map((a) => el("tr", {},
-        el("td", {}, String(a.attempt_number)), el("td", {}, badge(a.status)), el("td", { class: "mono" }, a.worker_id ?? "—"),
-        el("td", {}, fmtDur(a.duration_ms)), el("td", { class: "mono" }, a.error ?? "")))))));
-  }
+  if (attempts.length) parts.push(el("label", {}, "Attempt history"), el("div", { class: "table-wrap" }, el("table", {},
+    el("thead", {}, el("tr", {}, ...["#", "Status", "Worker", "Duration", "Error"].map((h) => el("th", {}, h)))),
+    el("tbody", {}, ...attempts.map((a) => el("tr", {}, el("td", {}, String(a.attempt_number)), el("td", {}, badge(a.status)),
+      el("td", { class: "mono" }, a.worker_id ?? "—"), el("td", {}, fmtDur(a.duration_ms)), el("td", { class: "mono" }, a.error ?? "")))))));
   parts.push(el("label", {}, "Payload"), el("pre", {}, JSON.stringify(j.payload, null, 2)));
   if (j.result) parts.push(el("label", {}, "Result"), el("pre", {}, JSON.stringify(j.result, null, 2)));
   if (j.error) parts.push(el("label", {}, "Last error"), el("pre", { class: "s-FAILED" }, j.error));
   $("detail-body").replaceChildren(...parts);
-  $("detail-actions").replaceChildren(...(["FAILED", "DEAD_LETTER"].includes(j.status)
+  $("detail-actions").replaceChildren(...(["FAILED", "DEAD_LETTER"].includes(j.status) && !j.workflow_run_id
     ? [el("button", { onclick: () => replay(j.job_id) }, "Replay as new job")] : []));
   $("detail").hidden = false;
 }
-
-async function loadHealth() {
-  try {
-    const h = await (await fetch("/health")).json();
-    $("h-db").className = "dot " + (h.database === "ok" ? "ok" : "bad");
-    $("h-redis").className = "dot " + (h.redis === "ok" ? "ok" : "bad");
-  } catch { $("h-db").className = $("h-redis").className = "dot bad"; }
+async function replay(id) {
+  try { const { body } = await api(`/api/v1/jobs/${id}/replay`, { method: "POST" }); selectedJob = body.job_id; offset = 0; refresh(); }
+  catch (err) { alert(errText(err)); }
 }
 
+// ------------------------------------------------------------- workflows tab
+async function loadWorkflows() {
+  ({ body: workflows } = await api("/api/v1/workflows"));
+  $("wf-list").replaceChildren(...(workflows.length ? workflows.map((w) => el("li", {},
+    el("span", {}, el("strong", {}, w.name), el("span", { class: "hint" }, `  ${w.steps.length} steps`)),
+    el("span", {}, el("button", { class: "small", onclick: () => startRun(w.workflow_id) }, "Run now"))))
+    : [el("li", { class: "hint" }, "No workflows yet.")]));
+  const current = $("sc-workflow").value;
+  $("sc-workflow").replaceChildren(...workflows.map((w) => el("option", { value: w.workflow_id }, w.name)));
+  if (current) $("sc-workflow").value = current;
+}
+async function createWorkflow() {
+  let def;
+  try { def = JSON.parse($("wf-def").value); } catch { return setMsg("wf-msg", "Definition is not valid JSON."); }
+  try { const { body } = await api("/api/v1/workflows", { method: "POST", json: def });
+        setMsg("wf-msg", `Created "${body.name}" (${body.steps.length} steps).`, true); refresh(); }
+  catch (err) { setMsg("wf-msg", errText(err)); }
+}
+async function startRun(wfId) {
+  try { const { body } = await api(`/api/v1/workflows/${wfId}/runs`, { method: "POST" }); selectedRun = body; refresh(); }
+  catch (err) { setMsg("wf-msg", errText(err)); }
+}
+async function loadRuns() {
+  const q = new URLSearchParams({ limit: 15 });
+  if ($("run-filter").value) q.set("status", $("run-filter").value);
+  const { body } = await api(`/api/v1/workflow-runs?${q}`);
+  $("runs-body").replaceChildren(...(body.items.length ? body.items.map((r) => el("tr", {
+      class: "clickable" + (r.run_id === selectedRun?.run_id ? " selected" : ""), onclick: () => { selectedRun = r; refresh(); } },
+    el("td", { class: "mono" }, r.run_id.slice(0, 8)), el("td", {}, r.workflow_name ?? ""), el("td", {}, badge(r.status)),
+    el("td", {}, r.schedule_id ? "schedule" : "api"), el("td", {}, fmtTime(r.created_at)), el("td", {}, fmtDur(r.duration_ms))))
+    : [el("tr", {}, el("td", { colspan: 6, class: "empty" }, "No runs yet — create a workflow and press Run now."))]));
+}
+async function loadRunDetail() {
+  if (!selectedRun) return;
+  const { body: run } = await api(`/api/v1/workflows/${selectedRun.workflow_id}/runs/${selectedRun.run_id}`);
+  $("run-detail").hidden = false;
+  $("run-title").replaceChildren(`${run.workflow_name} `, badge(run.status));
+  $("run-meta").textContent = `Run ${run.run_id} · started ${fmtDate(run.started_at)} · ${fmtDur(run.duration_ms)}` + (run.error ? ` · ${run.error}` : "");
+  $("run-actions").replaceChildren(...(["RUNNING", "SCHEDULED"].includes(run.status)
+    ? [el("button", { onclick: () => cancelRun(run) }, "Cancel run")] : []));
+  drawDag(run.steps);
+  $("run-steps").replaceChildren(...run.steps.filter((s) => s.result || s.error).map((s) => el("div", {},
+    el("label", {}, `${s.step_id} ${s.result ? "result" : "error"}`), el("pre", {}, s.result ? JSON.stringify(s.result, null, 2) : s.error))));
+}
+async function cancelRun(run) {
+  try { await api(`/api/v1/workflows/${run.workflow_id}/runs/${run.run_id}/cancel`, { method: "POST" }); refresh(); }
+  catch (err) { alert(errText(err)); }
+}
+function drawDag(steps) {
+  const dag = $("dag");
+  const levels = Math.max(0, ...steps.map((s) => s.level)) + 1;
+  const cols = Array.from({ length: levels }, () => el("div", { class: "dag-col" }));
+  const nodes = {};
+  for (const s of steps) {
+    nodes[s.step_id] = el("div", { class: `node s-${s.status}` },
+      el("div", { class: "id" }, s.step_id), el("div", { class: "meta" }, s.type),
+      el("div", { class: "meta" }, badge(s.status), ` ${s.attempts}/${s.max_attempts}`));
+    cols[s.level].append(nodes[s.step_id]);
+  }
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  dag.replaceChildren(svg, ...cols);
+  const box = dag.getBoundingClientRect();
+  for (const s of steps) for (const dep of s.depends_on) {
+    const a = nodes[dep].getBoundingClientRect(), b = nodes[s.step_id].getBoundingClientRect();
+    const x1 = a.right - box.left + dag.scrollLeft, y1 = a.top + a.height / 2 - box.top;
+    const x2 = b.left - box.left + dag.scrollLeft, y2 = b.top + b.height / 2 - box.top;
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", `M${x1},${y1} C${x1 + 28},${y1} ${x2 - 28},${y2} ${x2},${y2}`);
+    path.setAttribute("fill", "none"); path.setAttribute("stroke", "var(--edge)"); path.setAttribute("stroke-width", "1.5");
+    svg.append(path);
+  }
+}
+
+// ------------------------------------------------------------- schedules tab
+async function loadSchedules() {
+  const { body } = await api("/api/v1/schedules");
+  const wfName = (id) => workflows.find((w) => w.workflow_id === id)?.name ?? id.slice(0, 8);
+  $("sc-body").replaceChildren(...(body.length ? body.map((s) => el("tr", {},
+    el("td", {}, s.name), el("td", { class: "mono" }, s.cron),
+    el("td", {}, s.target_kind === "job" ? `job: ${s.job.type}` : `workflow: ${wfName(s.workflow_id)}`),
+    el("td", {}, s.enabled ? fmtDate(s.next_run_at) : "—"), el("td", {}, fmtDate(s.last_run_at)),
+    el("td", {}, el("span", { class: `badge ${s.enabled ? "s-SUCCEEDED" : "s-CANCELLED"}` }, s.enabled ? "active" : "paused")),
+    el("td", {}, el("button", { class: "small", onclick: () => toggleSchedule(s) }, s.enabled ? "Pause" : "Resume"), " ",
+      el("button", { class: "small", onclick: () => deleteSchedule(s) }, "Delete"))))
+    : [el("tr", {}, el("td", { colspan: 7, class: "empty" }, "No schedules yet."))]));
+}
+async function createSchedule() {
+  const body = { name: $("sc-name").value.trim(), cron: $("sc-cron").value.trim() };
+  if ($("sc-kind").value === "job") {
+    let payload; try { payload = JSON.parse($("sc-payload").value || "{}"); } catch { return setMsg("sc-msg", "Payload is not valid JSON."); }
+    body.job = { type: $("sc-type").value, payload };
+  } else body.workflow_id = $("sc-workflow").value;
+  try { const { body: s } = await api("/api/v1/schedules", { method: "POST", json: body });
+        setMsg("sc-msg", `Created. Next run ${fmtDate(s.next_run_at)}.`, true); refresh(); }
+  catch (err) { setMsg("sc-msg", errText(err)); }
+}
+async function toggleSchedule(s) { await api(`/api/v1/schedules/${s.schedule_id}`, { method: "PATCH", json: { enabled: !s.enabled } }); refresh(); }
+async function deleteSchedule(s) { if (confirm(`Delete schedule "${s.name}"?`)) { await api(`/api/v1/schedules/${s.schedule_id}`, { method: "DELETE" }); refresh(); } }
+
+// ------------------------------------------------------------- shell
+async function loadHealth() {
+  try { const h = await (await fetch("/health")).json();
+        $("h-db").className = "dot " + (h.database === "ok" ? "ok" : "bad");
+        $("h-redis").className = "dot " + (h.redis === "ok" ? "ok" : "bad"); }
+  catch { $("h-db").className = $("h-redis").className = "dot bad"; }
+}
 async function refresh() {
   if (!apiKey) return;
-  try { await Promise.all([loadStats(), loadJobs(), loadDetail()]); } catch (e) { console.warn(e.message); }
+  try {
+    if (tab === "jobs") await Promise.all([loadStats(), loadJobs(), loadJobDetail()]);
+    if (tab === "workflows") await Promise.all([loadWorkflows(), loadRuns(), loadRunDetail()]);
+    if (tab === "schedules") { await loadWorkflows(); await loadSchedules(); }
+  } catch (e) { console.warn(e.message); }
+}
+function showTab(name) {
+  tab = name; store.set(TAB_STORE, name);
+  document.querySelectorAll("nav.tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll("[data-view]").forEach((v) => { v.hidden = v.dataset.view !== name; });
+  refresh();
 }
 
-$("status-filter").append(...STATUSES.map((s) => el("option", { value: s }, s.replace("_", " "))));
+$("status-filter").append(...STATUSES.map((s) => el("option", { value: s }, s.replaceAll("_", " "))));
+$("wf-def").value = JSON.stringify(EXAMPLE_WF, null, 2);
+document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 $("auth-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  apiKey = $("api-key").value.trim();
-  try { localStorage.setItem(KEY_STORE, apiKey); } catch {}
-  if (await loadMe()) { loadJobTypes(); refresh(); }
+  e.preventDefault(); apiKey = $("api-key").value.trim(); store.set(KEY_STORE, apiKey);
+  if (await loadMe()) { loadJobTypes(); refresh(); connectEvents(); }
 });
 $("job-type").addEventListener("change", onTypeChange);
+$("sc-type").addEventListener("change", onScheduleTypeChange);
+$("sc-kind").addEventListener("change", () => { const wf = $("sc-kind").value === "workflow"; $("sc-wf").hidden = !wf; $("sc-job").hidden = wf; });
 $("submit-form").addEventListener("submit", submitJob);
+$("wf-create").addEventListener("click", createWorkflow);
+$("sc-create").addEventListener("click", createSchedule);
 $("status-filter").addEventListener("change", () => { offset = 0; refresh(); });
+$("run-filter").addEventListener("change", refresh);
 $("prev").addEventListener("click", () => { offset = Math.max(0, offset - PAGE); refresh(); });
 $("next").addEventListener("click", () => { offset += PAGE; refresh(); });
 
-loadHealth();
-loadMe().then((ok) => { if (ok) { loadJobTypes(); refresh(); } });
-setInterval(refresh, 2000);       // polling; live updates (SSE) arrive in Phase 3
+setLive(false); loadHealth();
+showTab(store.get(TAB_STORE) || "jobs");
+loadMe().then((ok) => { if (ok) { loadJobTypes(); refresh(); connectEvents(); } });
+setInterval(() => { if (!live) refresh(); }, 3000);  // fallback polling only while the live stream is down
+setInterval(refresh, 30000);                          // slow safety refresh even when live
 setInterval(loadHealth, 10000);
 </script>
 </body>

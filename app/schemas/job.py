@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.config import get_settings
 from app.db.models import AttemptStatus, Job, JobAttempt, JobStatus
@@ -38,6 +38,29 @@ class JobCreate(BaseModel):
         le=_settings.max_timeout_seconds,
         description="Per-attempt time limit. Defaults to the job type's default.",
     )
+    run_at: datetime | None = Field(
+        default=None, description="Run at this time instead of now (UTC if no offset). Status SCHEDULED until then."
+    )
+    delay_seconds: int | None = Field(
+        default=None, ge=1, le=30 * 24 * 3600, description="Run this many seconds from now. Alternative to run_at."
+    )
+
+    @model_validator(mode="after")
+    def _one_delay(self) -> "JobCreate":
+        if self.run_at is not None and self.delay_seconds is not None:
+            raise ValueError("Provide at most one of run_at and delay_seconds")
+        return self
+
+    def resolved_run_at(self) -> datetime | None:
+        if self.delay_seconds is not None:
+            return datetime.now(timezone.utc) + timedelta(seconds=self.delay_seconds)
+        if self.run_at is not None and self.run_at.tzinfo is None:
+            return self.run_at.replace(tzinfo=timezone.utc)
+        return self.run_at
+
+    def service_kwargs(self) -> dict[str, Any]:
+        return {"job_type": self.type, "payload": self.payload, "max_attempts": self.max_attempts,
+                "timeout_seconds": self.timeout_seconds, "run_at": self.resolved_run_at()}
 
 
 class JobRead(BaseModel):
@@ -52,6 +75,10 @@ class JobRead(BaseModel):
     timeout_seconds: int
     worker_id: str | None
     replay_of: uuid.UUID | None
+    workflow_run_id: uuid.UUID | None = None
+    step_id: str | None = None
+    schedule_id: uuid.UUID | None = None
+    scheduled_for: datetime | None = None
     created_at: datetime
     queued_at: datetime | None
     started_at: datetime | None
@@ -76,6 +103,10 @@ class JobRead(BaseModel):
             timeout_seconds=job.timeout_seconds,
             worker_id=job.worker_id,
             replay_of=job.replay_of,
+            workflow_run_id=job.workflow_run_id,
+            step_id=job.step_id,
+            schedule_id=job.schedule_id,
+            scheduled_for=job.scheduled_for,
             created_at=job.created_at,
             queued_at=job.queued_at,
             started_at=job.started_at,

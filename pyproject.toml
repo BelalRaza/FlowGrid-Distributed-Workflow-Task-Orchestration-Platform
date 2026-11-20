@@ -19,6 +19,8 @@ dependencies = [
     "celery[redis]>=5.4,<6",
     # kombu's Redis transport requires redis-py >= 6.1; let celery[redis] pick it.
     "redis>=6.1",
+    "croniter>=2.0",
+    "prometheus-client>=0.20",
 ]
 
 [project.optional-dependencies]

@@ -5,6 +5,10 @@ x-app-env: &app-env
   REDIS_URL: redis://redis:6379/0
   LOG_LEVEL: INFO
   LOG_FORMAT: json
+  # Lower than the 300s default so `make chaos` can demonstrate recovery from
+  # Redis losing messages in about a minute. In production keep this above
+  # your normal worst-case queue wait.
+  QUEUED_REPUBLISH_AFTER_SECONDS: "60"
 
 services:
   postgres:
@@ -43,32 +47,46 @@ services:
       postgres:
         condition: service_healthy
 
-  # The only service with `build:`; migrate and worker reuse the same image.
+  # The only service with `build:`; migrate, worker and sweeper reuse the image.
   api:
     build: .
     image: flowgrid-app:latest
     environment: *app-env
     ports:
       - "${API_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
 
+  # Scale horizontally:  docker compose up -d --scale worker=4
   worker:
     image: flowgrid-app:latest
     pull_policy: never
     environment: *app-env
-    command: ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    command: >-
+      celery -A app.tasks.celery_app worker --loglevel=INFO
+      --concurrency=${WORKER_CONCURRENCY:-2} --without-gossip --without-mingle
+    # On `docker compose stop` Celery does a warm shutdown: it stops taking new
+    # messages and finishes the ones in progress. Give it up to the longest
+    # job timeout before Docker sends SIGKILL (any job killed anyway is
+    # recovered by lease expiry).
+    stop_grace_period: 2m
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
 
-  # Recovery loop: expired leases, due retries, outbox relay, key purging.
-  # Safe to scale (`--scale sweeper=2`): every action is a guarded UPDATE.
+  # Recovery + scheduling loop: leases, retries, cron schedules, delayed jobs,
+  # outbox relay, stuck workflow runs. Safe to scale (`--scale sweeper=2`):
+  # every action is a guarded UPDATE or compare-and-swap.
   sweeper:
     image: flowgrid-app:latest
     pull_policy: never
@@ -79,6 +97,20 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+
+  # Optional monitoring:  docker compose --profile monitoring up -d
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    profiles: ["monitoring"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./deploy/prometheus:/etc/prometheus:ro
+    ports:
+      - "${PROMETHEUS_HOST_PORT:-9090}:9090"
+    depends_on:
+      - api
 
 volumes:
   pgdata:

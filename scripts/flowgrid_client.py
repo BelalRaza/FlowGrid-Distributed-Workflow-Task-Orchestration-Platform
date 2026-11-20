@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
-TERMINAL = {"SUCCEEDED", "FAILED", "DEAD_LETTER"}
+TERMINAL = {"SUCCEEDED", "FAILED", "DEAD_LETTER", "CANCELLED"}
+RUN_TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED"}
 
 
 def compose(*args: str, check: bool = True) -> str:
@@ -69,6 +73,15 @@ class Client:
     def attempts(self, job_id: str) -> list[dict]:
         return self.call("GET", f"/api/v1/jobs/{job_id}/attempts")[1]
 
+    def wait_run(self, workflow_id: str, run_id: str, timeout: float = 60) -> dict:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            run = self.call("GET", f"/api/v1/workflows/{workflow_id}/runs/{run_id}")[1]
+            if run["status"] in RUN_TERMINAL:
+                return run
+            time.sleep(0.25)
+        raise AssertionError(f"run {run_id} not finished within {timeout}s (last: {run['status']})")
+
     def wait(self, job_id: str, timeout: float = 30, until: set[str] = TERMINAL) -> dict:
         deadline = time.monotonic() + timeout
         seen: list[str] = []
@@ -81,6 +94,37 @@ class Client:
                 return job
             time.sleep(0.2)
         raise AssertionError(f"job {job_id} did not reach {until} within {timeout}s (seen: {seen})")
+
+
+class SSEReader(threading.Thread):
+    """Reads /api/v1/events in the background and collects parsed events."""
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        super().__init__(daemon=True)
+        url = urlsplit(base_url)
+        self.conn = http.client.HTTPConnection(url.hostname, url.port or 80, timeout=60)
+        self.api_key = api_key
+        self.events: list[tuple[float, dict]] = []
+        self.ready = threading.Event()
+
+    def run(self) -> None:
+        self.conn.request("GET", "/api/v1/events", headers={"Authorization": f"Bearer {self.api_key}"})
+        res = self.conn.getresponse()
+        kind = None
+        for raw in res:
+            line = raw.decode().rstrip("\n")
+            if line.startswith("event: "):
+                kind = line[7:]
+                if kind == "ready":
+                    self.ready.set()
+            elif line.startswith("data: ") and kind not in (None, "ready"):
+                self.events.append((time.monotonic(), json.loads(line[6:])))
+
+    def close(self) -> None:
+        try:
+            self.conn.sock.close()
+        except Exception:
+            pass
 
 
 def run_checks(checks) -> int:

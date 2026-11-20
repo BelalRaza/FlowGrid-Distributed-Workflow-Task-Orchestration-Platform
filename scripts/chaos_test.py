@@ -6,7 +6,8 @@ forces a timeout) and asserts the system recovers to the correct state.
     make up
     make chaos
 
-Takes about a minute: lease expiry is deliberately not instant.
+Takes about three minutes: lease expiry and message-loss recovery are
+deliberately not instant, and the multi-sweeper check spans two cron ticks.
 """
 
 from __future__ import annotations
@@ -25,6 +26,13 @@ def main() -> int:
     base = parser.parse_args().base_url
     c = Client(base, create_api_key("chaos-test"))
     print(f"FlowGrid chaos test against {base}\n")
+
+    # Three sweepers race to fire the same every-minute schedule for the whole
+    # run; checked at the end (exactly one job per tick).
+    compose("up", "-d", "--no-recreate", "--scale", "sweeper=3", "sweeper")
+    race_marker = f"race-{uuid.uuid4().hex[:8]}"
+    race = c.call("POST", "/api/v1/schedules", {
+        "name": race_marker, "cron": "* * * * *", "job": {"type": "echo", "payload": {"message": race_marker}}})[1]
 
     def worker_killed_mid_job():
         job = c.submit("sleep", {"seconds": 6}, timeout_seconds=8)
@@ -95,12 +103,62 @@ def main() -> int:
         assert after["attempts"] == 1 and after["status"] == "SUCCEEDED", after
         return "3 duplicate messages delivered, attempts still 1"
 
+    def broker_loses_queued_messages():
+        compose("stop", "worker")
+        try:
+            ids = [c.submit("echo", {"message": f"lost-{i}"})["job_id"] for i in range(5)]
+            assert all(c.job(i)["status"] == "QUEUED" for i in ids)
+            compose("exec", "-T", "redis", "redis-cli", "FLUSHALL")  # the messages are gone
+            assert compose("exec", "-T", "redis", "redis-cli", "LLEN", "flowgrid.jobs").strip() == "0"
+        finally:
+            compose("start", "worker")
+        lost_at = time.monotonic()
+        jobs = [c.wait(i, timeout=120) for i in ids]
+        assert all(j["status"] == "SUCCEEDED" and j["attempts"] == 1 for j in jobs), jobs
+        return f"5 QUEUED messages wiped by FLUSHALL; re-published by the sweeper, all done {time.monotonic() - lost_at:.0f}s later"
+
+    def worker_killed_mid_workflow():
+        wf = c.call("POST", "/api/v1/workflows", {"name": "chaos-wf", "steps": [
+            {"id": "slow", "type": "sleep", "payload": {"seconds": 5}, "timeout_seconds": 7},
+            {"id": "after", "type": "summarize", "depends_on": ["slow"]},
+        ]})[1]
+        run = c.call("POST", f"/api/v1/workflows/{wf['workflow_id']}/runs")[1]
+        slow_job = next(s["job_id"] for s in run["steps"] if s["step_id"] == "slow")
+        c.wait(slow_job, until={"RUNNING"}, timeout=15)
+        compose("kill", "-s", "SIGKILL", "worker")
+        compose("start", "worker")
+        run = c.wait_run(wf["workflow_id"], run["run_id"], timeout=90)
+        assert run["status"] == "SUCCEEDED", run
+        attempts = [a["status"] for a in c.attempts(slow_job)]
+        assert attempts == ["LOST", "SUCCEEDED"], attempts
+        return f"step 'slow' attempts {attempts}; dependent step ran after recovery; run SUCCEEDED"
+
+    def concurrent_sweepers_fire_each_tick_once():
+        # The schedule has been live since the start; make sure it spans 2+ ticks.
+        deadline = time.monotonic() + 130
+        while time.monotonic() < deadline:
+            ticks = psql(
+                "SELECT scheduled_for, count(*) FROM jobs "
+                f"WHERE schedule_id = '{race['schedule_id']}' GROUP BY scheduled_for ORDER BY 1"
+            ).splitlines()
+            if len(ticks) >= 2:
+                break
+            time.sleep(2)
+        c.call("DELETE", f"/api/v1/schedules/{race['schedule_id']}")
+        compose("up", "-d", "--no-recreate", "--scale", "sweeper=1", "sweeper")
+        counts = [int(t.split("|")[1]) for t in ticks]
+        assert len(counts) >= 2 and all(n == 1 for n in counts), ticks
+        return f"3 sweepers, {len(counts)} ticks, jobs per tick = {counts}"
+
     return run_checks([
         ("worker SIGKILLed mid-job -> lease recovery", worker_killed_mid_job),
         ("timeout on every attempt -> DEAD_LETTER", timeout_then_dead_letter),
         ("Redis outage -> outbox delivers later", redis_outage),
         ("crash mid-batch -> no duplicate side effects", duplicate_side_effects_under_crash),
         ("duplicate message delivery -> runs once", duplicate_message_delivery),
+        ("Redis FLUSHALL loses queued messages -> re-published", broker_loses_queued_messages),
+        ("worker SIGKILLed mid-workflow -> run completes", worker_killed_mid_workflow),
+        ("3 concurrent sweepers -> each cron tick fires once", concurrent_sweepers_fire_each_tick_once),
     ])
 
 

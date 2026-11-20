@@ -3,16 +3,16 @@
 # compose build path.
 export COMPOSE_BAKE=false
 
-.PHONY: up down logs ps test test-pg smoke chaos api-key clean
+.PHONY: up down logs ps test test-pg smoke chaos bench monitoring api-key clean
 
 up:            ## Build and start postgres, redis, migrations, api, worker, sweeper
 	docker compose up -d --build
 
-down:          ## Stop the stack (keeps the database volume)
-	docker compose down
+down:          ## Stop the stack, incl. Prometheus if running (keeps the database volume)
+	docker compose --profile monitoring down
 
 clean:         ## Stop the stack and delete the database volume
-	docker compose down -v
+	docker compose --profile monitoring down -v
 
 logs:          ## Follow api, worker and sweeper logs
 	docker compose logs -f api worker sweeper
@@ -34,5 +34,11 @@ test-pg:       ## Run the test suite inside Docker against PostgreSQL
 smoke:         ## End-to-end check against the running stack (real Redis + worker)
 	.venv/bin/python scripts/smoke_test.py
 
-chaos:         ## Failure-injection tests: kill the worker, stop Redis, force timeouts
+chaos:         ## Failure-injection tests: kill workers, stop/flush Redis, race sweepers (~3 min)
 	.venv/bin/python scripts/chaos_test.py
+
+bench:         ## Throughput benchmark with 1, 2 and 4 worker containers (~2 min)
+	.venv/bin/python scripts/benchmark.py
+
+monitoring:    ## Start Prometheus (http://localhost:9090) with FlowGrid alert rules
+	docker compose --profile monitoring up -d prometheus

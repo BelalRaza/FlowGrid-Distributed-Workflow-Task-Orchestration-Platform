@@ -14,7 +14,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -43,6 +43,8 @@ class JobContext:
     job_id: uuid.UUID
     attempt: int
     session_factory: sessionmaker[Session]
+    # For workflow steps: results of the steps this one depends on, by step ID.
+    upstream: dict[str, Any] = field(default_factory=dict)
 
 
 HandlerFunc = Callable[[Any, JobContext], dict[str, Any]]
@@ -154,6 +156,10 @@ class ProcessRecordsPayload(_StrictPayload):
 
 class FlakyPayload(_StrictPayload):
     fail_times: int = Field(ge=0, le=10, description="Fail transiently on the first N attempts.")
+
+
+class SummarizePayload(_StrictPayload):
+    title: str = Field(default="summary", min_length=1, max_length=200)
 
 
 class AlwaysFailPayload(_StrictPayload):
@@ -296,6 +302,25 @@ def process_records(payload: ProcessRecordsPayload, ctx: JobContext) -> dict[str
         # Cap the stored detail so one huge batch cannot bloat the jobs table.
         "failures": failures[:50],
     }
+
+
+@register(
+    "summarize",
+    payload_model=SummarizePayload,
+    description=(
+        "Workflow fan-in step: sums every numeric field of its upstream steps' results "
+        "(e.g. 'processed' across parallel process_records steps)."
+    ),
+    example={"title": "nightly import"},
+    default_timeout_seconds=10,
+)
+def summarize(payload: SummarizePayload, ctx: JobContext) -> dict[str, Any]:
+    totals: dict[str, float] = {}
+    for result in ctx.upstream.values():
+        for key, value in (result or {}).items():
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                totals[key] = totals.get(key, 0) + value
+    return {"title": payload.title, "upstream_steps": sorted(ctx.upstream), "totals": totals}
 
 
 @register(

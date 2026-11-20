@@ -17,9 +17,16 @@ def check_redis() -> bool:
         return False
 
 
+@router.get("/health/live")
+def liveness() -> dict[str, str]:
+    """Liveness probe: the process is up. No dependency checks, so a database
+    outage does not make an orchestrator restart every API container."""
+    return {"status": "ok"}
+
+
 @router.get("/health")
 def health(response: Response, db: Session = Depends(get_db)) -> dict[str, str]:
-    """Liveness + dependency check. Returns 503 if PostgreSQL or Redis is unreachable."""
+    """Readiness check. Returns 503 if PostgreSQL or Redis is unreachable."""
     try:
         db.execute(text("SELECT 1"))
         database = "ok"

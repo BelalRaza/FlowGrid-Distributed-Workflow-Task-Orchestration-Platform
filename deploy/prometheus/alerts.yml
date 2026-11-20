@@ -1,0 +1,56 @@
+groups:
+  - name: flowgrid
+    rules:
+      - alert: FlowGridDatabaseUnreachable
+        expr: max(flowgrid_database_up) == 0 or absent(flowgrid_database_up)
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "FlowGrid API cannot reach PostgreSQL (or the API is down)"
+
+      - alert: FlowGridSweeperLagging
+        # Retries / delayed jobs / schedules are overdue: no sweeper running, or it is overloaded.
+        expr: max(flowgrid_sweeper_lag_seconds) > 60
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Due jobs are {{ $value | humanizeDuration }} overdue: is the sweeper running?"
+
+      - alert: FlowGridQueueBacklog
+        # Jobs are waiting for a worker: add workers (`--scale worker=N`).
+        expr: max(flowgrid_oldest_queued_job_age_seconds) > 300
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Oldest queued job has waited {{ $value | humanizeDuration }}"
+
+      - alert: FlowGridBrokerPublishFailing
+        # Jobs accepted but not reaching Redis (outbox backing up).
+        expr: max(flowgrid_oldest_pending_job_age_seconds) > 120
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: "Jobs stuck in PENDING for {{ $value | humanizeDuration }}: check Redis"
+
+      - alert: FlowGridDeadLettersGrowing
+        expr: increase(max(flowgrid_jobs{status="DEAD_LETTER"})[30m:]) > 10
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value }} jobs dead-lettered in the last 30 minutes"
+
+      - alert: FlowGridExpiredLeases
+        # Leases expired but not recovered: the sweeper is not keeping up.
+        expr: max(flowgrid_expired_leases) > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value }} RUNNING jobs have expired leases"
+
+      - alert: FlowGridHighErrorRate
+        expr: |
+          sum(rate(flowgrid_http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(flowgrid_http_requests_total[5m])), 1) > 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "More than 5% of API requests are failing with 5xx"

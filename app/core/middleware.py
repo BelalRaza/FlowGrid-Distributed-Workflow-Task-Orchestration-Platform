@@ -31,8 +31,17 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         start = time.perf_counter()
         with log_context(request_id=request_id):
             response = await call_next(request)
-            duration_ms = round((time.perf_counter() - start) * 1000, 1)
-            if request.url.path != "/health":
+            elapsed = time.perf_counter() - start
+            duration_ms = round(elapsed * 1000, 1)
+
+            # Label metrics by the matched route *template* ("/api/v1/jobs/{job_id}"),
+            # never the raw path, or every job ID becomes its own time series.
+            metrics = getattr(request.app.state, "metrics", None)
+            if metrics is not None:
+                route = request.scope.get("route")
+                metrics.observe(request.method, getattr(route, "path", "unmatched"), response.status_code, elapsed)
+
+            if request.url.path not in ("/health", "/health/live", "/metrics"):
                 logger.info(
                     "%s %s %s",
                     request.method,
