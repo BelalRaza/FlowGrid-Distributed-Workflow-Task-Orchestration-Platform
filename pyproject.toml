@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flowgrid"
+version = "0.1.0"
+description = "FlowGrid — a distributed workflow and background task processing platform"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7,<3",
+    "pydantic-settings>=2.3,<3",
+    "sqlalchemy>=2.0.30,<2.1",
+    "psycopg[binary]>=3.1.19,<4",
+    "alembic>=1.13,<2",
+    "celery[redis]>=5.4,<6",
+    # kombu's Redis transport requires redis-py >= 6.1; let celery[redis] pick it.
+    "redis>=6.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "httpx>=0.27",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

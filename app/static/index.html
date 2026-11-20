@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FlowGrid Dashboard</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #e3e6eb; --text: #1b1f24; --muted: #667080;
+    --accent: #2563eb; --accent-text: #ffffff; --code-bg: #f1f3f6;
+    --pending: #8a8f98; --queued: #b7791f; --running: #2563eb; --succeeded: #15803d; --failed: #c2410c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --panel: #171b21; --border: #2a3039; --text: #e6e9ee; --muted: #9aa3b0;
+      --accent: #4f8cff; --accent-text: #0b0d10; --code-bg: #11151a;
+      --pending: #9aa3b0; --queued: #e0a63a; --running: #4f8cff; --succeeded: #34c27a; --failed: #ff7a45;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+           padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  header h1 { margin: 0; font-size: 18px; letter-spacing: -0.01em; }
+  header h1 span { color: var(--muted); font-weight: 400; }
+  .health { display: flex; gap: 14px; color: var(--muted); font-size: 13px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--pending); }
+  .dot.ok { background: var(--succeeded); } .dot.bad { background: var(--failed); }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; display: grid; gap: 16px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat .value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
+  .panel h2 { margin: 0 0 12px; font-size: 15px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  select, textarea, input { width: 100%; font: inherit; color: var(--text); background: var(--bg);
+                            border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; }
+  textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; min-height: 140px; resize: vertical; }
+  .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
+  .row { display: flex; gap: 8px; align-items: end; }
+  button { font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+           border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  .msg { margin-top: 10px; font-size: 13px; min-height: 1.2em; word-break: break-word; }
+  .msg.err { color: var(--failed); } .msg.ok { color: var(--succeeded); }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .toolbar select { width: auto; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  tbody tr { cursor: pointer; } tbody tr:hover { background: var(--bg); }
+  tbody tr.selected { background: var(--code-bg); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+           border: 1px solid currentColor; }
+  .s-PENDING { color: var(--pending); } .s-QUEUED { color: var(--queued); } .s-RUNNING { color: var(--running); }
+  .s-SUCCEEDED { color: var(--succeeded); } .s-FAILED { color: var(--failed); }
+  .pager { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+  .empty { color: var(--muted); text-align: center; padding: 24px; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+        overflow: auto; font-size: 12px; margin: 4px 0 12px; max-height: 260px; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 12px; font-size: 13px; }
+  dt { color: var(--muted); } dd { margin: 0; word-break: break-all; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FlowGrid <span>· Job dashboard</span></h1>
+  <div class="health">
+    <span><i class="dot" id="h-db"></i>PostgreSQL</span>
+    <span><i class="dot" id="h-redis"></i>Redis</span>
+  </div>
+</header>
+
+<main>
+  <section class="stats" id="stats"></section>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>Submit a job</h2>
+      <form id="submit-form">
+        <label for="job-type">Job type</label>
+        <select id="job-type"></select>
+        <p class="hint" id="job-desc"></p>
+        <label for="payload">Payload (JSON)</label>
+        <textarea id="payload" spellcheck="false"></textarea>
+        <div class="row">
+          <div style="flex:0 0 90px">
+            <label for="count">Copies</label>
+            <input id="count" type="number" min="1" max="50" value="1" />
+          </div>
+          <button class="primary" type="submit" id="submit-btn" style="flex:1">Submit</button>
+        </div>
+        <div class="msg" id="submit-msg"></div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <h2 style="margin:0">Jobs</h2>
+        <select id="status-filter" aria-label="Filter by status">
+          <option value="">All statuses</option>
+          <option>PENDING</option><option>QUEUED</option><option>RUNNING</option>
+          <option>SUCCEEDED</option><option>FAILED</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Job ID</th><th>Type</th><th>Status</th><th>Attempts</th><th>Created</th><th>Duration</th><th>Worker</th></tr></thead>
+          <tbody id="jobs-body"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span id="pager-info"></span>
+        <span><button id="prev">← Prev</button> <button id="next">Next →</button></span>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" id="detail" hidden>
+    <h2>Job detail</h2>
+    <div id="detail-body"></div>
+  </section>
+</main>
+
+<script>
+const PAGE = 15;
+const STATUSES = ["PENDING", "QUEUED", "RUNNING", "SUCCEEDED", "FAILED"];
+let jobTypes = [], offset = 0, selectedId = null;
+const $ = (id) => document.getElementById(id);
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { body });
+  return body;
+}
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v; else if (k.startsWith("on")) node.addEventListener(k.slice(2), v); else node.setAttribute(k, v);
+  }
+  for (const c of children) node.append(c ?? "");
+  return node;
+}
+
+const badge = (s) => el("span", { class: `badge s-${s}` }, s);
+const fmtTime = (t) => t ? new Date(t).toLocaleTimeString() : "—";
+const fmtDur = (ms) => ms == null ? "—" : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+
+async function loadJobTypes() {
+  jobTypes = await api("/api/v1/job-types");
+  const sel = $("job-type");
+  sel.replaceChildren(...jobTypes.map((t) => el("option", { value: t.name }, t.name)));
+  onTypeChange();
+}
+
+function onTypeChange() {
+  const t = jobTypes.find((x) => x.name === $("job-type").value);
+  if (!t) return;
+  $("job-desc").textContent = t.description;
+  $("payload").value = JSON.stringify(t.example, null, 2);
+}
+
+async function submitJob(e) {
+  e.preventDefault();
+  const msg = $("submit-msg"); msg.className = "msg"; msg.textContent = "";
+  let payload;
+  try { payload = JSON.parse($("payload").value || "{}"); }
+  catch { msg.className = "msg err"; msg.textContent = "Payload is not valid JSON."; return; }
+  const count = Math.min(50, Math.max(1, parseInt($("count").value, 10) || 1));
+  $("submit-btn").disabled = true;
+  try {
+    let last;
+    for (let i = 0; i < count; i++) {
+      last = await api("/api/v1/jobs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: $("job-type").value, payload }),
+      });
+    }
+    msg.className = "msg ok";
+    msg.textContent = count === 1 ? `Accepted job ${last.job_id.slice(0, 8)}…` : `Accepted ${count} jobs.`;
+    selectedId = last.job_id; offset = 0;
+    refresh();
+  } catch (err) {
+    msg.className = "msg err";
+    const d = err.body?.detail;
+    msg.textContent = typeof d === "string" ? d
+      : d?.errors ? `${d.message}: ` + d.errors.map((x) => `${x.loc.join(".") || "payload"} — ${x.msg}`).join("; ")
+      : d?.message ?? err.message;
+  } finally { $("submit-btn").disabled = false; }
+}
+
+async function loadStats() {
+  const s = await api("/api/v1/jobs/stats");
+  const cards = [["Total", s.total], ...STATUSES.map((k) => [k, s.by_status[k] ?? 0])];
+  $("stats").replaceChildren(...cards.map(([label, value]) =>
+    el("div", { class: "stat" }, el("div", { class: `label ${label === "Total" ? "" : "s-" + label}` }, label), el("div", { class: "value" }, String(value)))));
+}
+
+async function loadJobs() {
+  const status = $("status-filter").value;
+  const q = new URLSearchParams({ limit: PAGE, offset });
+  if (status) q.set("status", status);
+  const data = await api(`/api/v1/jobs?${q}`);
+  const body = $("jobs-body");
+  if (!data.items.length) {
+    body.replaceChildren(el("tr", {}, el("td", { colspan: 7, class: "empty" }, "No jobs yet — submit one on the left.")));
+  } else {
+    body.replaceChildren(...data.items.map((j) => el("tr", {
+        class: j.job_id === selectedId ? "selected" : "",
+        onclick: () => { selectedId = j.job_id; refresh(); },
+      },
+      el("td", { class: "mono" }, j.job_id.slice(0, 8)), el("td", {}, j.type), el("td", {}, badge(j.status)),
+      el("td", {}, String(j.attempts)), el("td", {}, fmtTime(j.created_at)), el("td", {}, fmtDur(j.duration_ms)),
+      el("td", { class: "mono" }, j.worker_id ?? "—"))));
+  }
+  const end = Math.min(offset + PAGE, data.total);
+  $("pager-info").textContent = data.total ? `${offset + 1}–${end} of ${data.total}` : "";
+  $("prev").disabled = offset === 0;
+  $("next").disabled = end >= data.total;
+}
+
+async function loadDetail() {
+  if (!selectedId) return;
+  const j = await api(`/api/v1/jobs/${selectedId}`);
+  const rows = [["Job ID", j.job_id], ["Type", j.type], ["Status", badge(j.status)], ["Attempts", String(j.attempts)],
+    ["Worker", j.worker_id ?? "—"], ["Created", j.created_at], ["Queued", j.queued_at ?? "—"],
+    ["Started", j.started_at ?? "—"], ["Finished", j.finished_at ?? "—"], ["Duration", fmtDur(j.duration_ms)]];
+  const parts = [el("dl", {}, ...rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", { class: "mono" }, v)]))];
+  parts.push(el("label", {}, "Payload"), el("pre", {}, JSON.stringify(j.payload, null, 2)));
+  if (j.result) parts.push(el("label", {}, "Result"), el("pre", {}, JSON.stringify(j.result, null, 2)));
+  if (j.error) parts.push(el("label", {}, "Error"), el("pre", { class: "s-FAILED" }, j.error));
+  $("detail-body").replaceChildren(...parts);
+  $("detail").hidden = false;
+}
+
+async function loadHealth() {
+  try {
+    const res = await fetch("/health"); const h = await res.json();
+    $("h-db").className = "dot " + (h.database === "ok" ? "ok" : "bad");
+    $("h-redis").className = "dot " + (h.redis === "ok" ? "ok" : "bad");
+  } catch { $("h-db").className = $("h-redis").className = "dot bad"; }
+}
+
+async function refresh() {
+  try { await Promise.all([loadStats(), loadJobs(), loadDetail()]); } catch (e) { console.error(e); }
+}
+
+$("job-type").addEventListener("change", onTypeChange);
+$("submit-form").addEventListener("submit", submitJob);
+$("status-filter").addEventListener("change", () => { offset = 0; refresh(); });
+$("prev").addEventListener("click", () => { offset = Math.max(0, offset - PAGE); refresh(); });
+$("next").addEventListener("click", () => { offset += PAGE; refresh(); });
+
+loadJobTypes(); refresh(); loadHealth();
+setInterval(refresh, 2000);       // Phase 1 polls; live updates (SSE) come in Phase 3.
+setInterval(loadHealth, 10000);
+</script>
+</body>
+</html>

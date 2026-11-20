@@ -1,0 +1,70 @@
+name: flowgrid
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql+psycopg://flowgrid:flowgrid@postgres:5432/flowgrid
+  REDIS_URL: redis://redis:6379/0
+  LOG_LEVEL: INFO
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: flowgrid
+      POSTGRES_PASSWORD: flowgrid
+      POSTGRES_DB: flowgrid
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowgrid -d flowgrid"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # One-shot service: applies database migrations, then exits.
+  migrate:
+    image: flowgrid-app:latest
+    pull_policy: never
+    environment: *app-env
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # The only service with `build:`; migrate and worker reuse the same image.
+  api:
+    build: .
+    image: flowgrid-app:latest
+    environment: *app-env
+    ports:
+      - "${API_HOST_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: flowgrid-app:latest
+    pull_policy: never
+    environment: *app-env
+    command: ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:

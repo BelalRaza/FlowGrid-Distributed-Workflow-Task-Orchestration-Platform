@@ -2,7 +2,7 @@
 
 ### A Distributed Workflow & Background Task Processing Platform
 
-> **Status: In planning / initial development.** This README describes the system I intend to build. Architecture diagrams, endpoints, and examples are **proposed**, not claims that they are already working.
+> **Status: Phase 1 (end-to-end MVP) implemented and tested.** Phase 2 and Phase 3 items below are still **proposed**. Read the build write-ups in [`docs/blog/`](docs/blog/).
 
 ## Why I'm building this
 
@@ -30,17 +30,18 @@ Doing all of that in a single request introduces timeouts and makes retries diff
 
 ## Features and scope
 
-These are **planned features**. A checked box will mean a feature is implemented and tested; currently, none are marked complete.
+A checked box means the feature is implemented and covered by tests (pytest suite + `scripts/smoke_test.py` against the real Docker stack).
 
 ### Phase 1 — End-to-end MVP
 
-- [ ] Submit an allow-listed job through a REST API.
-- [ ] Validate incoming payloads and create a persistent job record.
-- [ ] Dispatch work through a queue and execute it in a background worker.
-- [ ] Fetch job status and output by ID.
-- [ ] Store execution timestamps, errors, and attempt counts in PostgreSQL.
-- [ ] Run API, worker, PostgreSQL, and Redis locally with Docker Compose.
-- [ ] Add automated tests for the main happy path and failed jobs.
+- [x] Submit an allow-listed job through a REST API.
+- [x] Validate incoming payloads and create a persistent job record.
+- [x] Dispatch work through a queue and execute it in a background worker.
+- [x] Fetch job status and output by ID.
+- [x] Store execution timestamps, errors, and attempt counts in PostgreSQL.
+- [x] Run API, worker, PostgreSQL, and Redis locally with Docker Compose.
+- [x] Add automated tests for the main happy path and failed jobs.
+- [x] Basic dashboard to submit jobs and watch their status (served at `/`).
 
 ### Phase 2 — Reliability and security
 
@@ -116,13 +117,16 @@ The exact transitions will be refined during implementation. `DEAD_LETTER` is a 
 
 ## Proposed API
 
-The following endpoints and request bodies are **design examples**, not currently available routes.
+Routes marked ✅ are implemented. The others are still **design examples**.
 
 | Method | Endpoint | What it will do | Phase |
 | --- | --- | --- | --- |
-| `POST` | `/api/v1/jobs` | Submit a supported job | 1 |
-| `GET` | `/api/v1/jobs/{job_id}` | Get status, timestamps, result, and error | 1 |
-| `GET` | `/api/v1/jobs` | List jobs with filters and pagination | 1–2 |
+| `POST` | `/api/v1/jobs` | Submit a supported job (returns `202 Accepted`) | 1 ✅ |
+| `GET` | `/api/v1/jobs/{job_id}` | Get status, timestamps, result, and error | 1 ✅ |
+| `GET` | `/api/v1/jobs` | List jobs with filters (`status`, `type`) and pagination | 1 ✅ |
+| `GET` | `/api/v1/jobs/stats` | Job counts by status | 1 ✅ |
+| `GET` | `/api/v1/job-types` | Allow-listed job types and their payload schemas | 1 ✅ |
+| `GET` | `/health` | PostgreSQL + Redis connectivity | 1 ✅ |
 | `GET` | `/api/v1/jobs/{job_id}/attempts` | Inspect retries and execution history | 2 |
 | `POST` | `/api/v1/workflows` | Create a multi-step workflow | 3 |
 | `POST` | `/api/v1/workflows/{workflow_id}/runs` | Start a workflow run | 3 |
@@ -228,19 +232,42 @@ flowgrid/
 
 
 
-This tree is a **target layout**, not a statement that these files already exist.
+Phase 1 follows this layout, plus `app/static/` (dashboard), `scripts/` (end-to-end smoke test) and a `Makefile`.
 
 ## Local development
 
-**The application has not been implemented yet, so there are no verified setup commands or runnable API endpoints at this stage.** Once the initial scaffold exists, this section will include the exact installation, environment variables, migrations, startup commands, and tests.
+**Requirements:** Docker (with Compose v2+), Python 3.11+, `make`.
 
-The intended local dependencies are:
+```bash
+# 1. Start PostgreSQL, Redis, run migrations, start the API and one Celery worker
+make up
 
-- Python 3.11+ and a package manager
-- Docker and Docker Compose
-- PostgreSQL and Redis (started with Compose)
+# 2. Open the dashboard
+open http://localhost:8000          # API docs: http://localhost:8000/docs
 
-I will document a reproducible one-command startup workflow when it is actually working.
+# 3. End-to-end check through the real queue and worker
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+make smoke
+```
+
+Submit a job from the command line:
+
+```bash
+curl -s -X POST localhost:8000/api/v1/jobs -H 'Content-Type: application/json' \
+  -d '{"type": "process_records", "payload": {"batch_id": "b1", "record_ids": [101, 102, 103]}}'
+```
+
+| Command | What it does |
+| --- | --- |
+| `make up` / `make down` | Start / stop the stack (`make clean` also deletes the DB volume) |
+| `make logs` | Follow API and worker logs |
+| `make test` | Run the pytest suite locally against SQLite (no services needed) |
+| `make test-pg` | Run the pytest suite inside Docker against PostgreSQL |
+| `make smoke` | Run `scripts/smoke_test.py` against the running stack |
+
+**Available job types (Phase 1 allow-list):** `echo`, `sleep`, `process_records`, `always_fail`. `GET /api/v1/job-types` returns each one's JSON schema and an example payload.
+
+> The Makefile sets `COMPOSE_BAKE=false`; see the Phase 1 blog post for why (the project path contains an em dash).
 
 ## How I plan to evaluate it
 
@@ -273,4 +300,4 @@ My main goal is to learn how backend systems behave beyond the happy path: queue
 
 **Project type:** Backend Engineering · Distributed Systems · Python
 
-**Current stage:** Proposed / under development
+**Current stage:** Phase 1 complete · Phase 2 (reliability) next
