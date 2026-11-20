@@ -3,9 +3,9 @@
 # compose build path.
 export COMPOSE_BAKE=false
 
-.PHONY: up down logs ps test test-pg smoke worker-scale clean
+.PHONY: up down logs ps test test-pg smoke chaos api-key clean
 
-up:            ## Build and start postgres, redis, migrations, api, worker
+up:            ## Build and start postgres, redis, migrations, api, worker, sweeper
 	docker compose up -d --build
 
 down:          ## Stop the stack (keeps the database volume)
@@ -14,8 +14,11 @@ down:          ## Stop the stack (keeps the database volume)
 clean:         ## Stop the stack and delete the database volume
 	docker compose down -v
 
-logs:          ## Follow api + worker logs
-	docker compose logs -f api worker
+logs:          ## Follow api, worker and sweeper logs
+	docker compose logs -f api worker sweeper
+
+api-key:       ## Create an API key:  make api-key NAME=my-laptop
+	docker compose exec -T api python -m app.cli create-api-key --name "$(or $(NAME),dev)"
 
 ps:
 	docker compose ps
@@ -30,3 +33,6 @@ test-pg:       ## Run the test suite inside Docker against PostgreSQL
 
 smoke:         ## End-to-end check against the running stack (real Redis + worker)
 	.venv/bin/python scripts/smoke_test.py
+
+chaos:         ## Failure-injection tests: kill the worker, stop Redis, force timeouts
+	.venv/bin/python scripts/chaos_test.py

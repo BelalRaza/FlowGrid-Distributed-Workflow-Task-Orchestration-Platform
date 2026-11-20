@@ -2,18 +2,27 @@
 
 FlowGrid never executes arbitrary code. A client can only submit a job whose
 ``type`` is registered here, and its ``payload`` must validate against that
-handler's Pydantic model. Handlers are plain functions so they can be unit
-tested without Celery, Redis or a database.
+handler's Pydantic model.
+
+Handlers receive a ``JobContext``. Delivery is at-least-once (a job can run
+more than once after a crash or timeout), so any handler with side effects
+must make them idempotent — see ``process_records`` for the pattern.
 """
 
 from __future__ import annotations
 
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from sqlalchemy import insert as generic_insert
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.db.models import Notification, ProcessedRecord
+from app.services.retry import PermanentJobError, TransientJobError
 
 
 class UnknownJobTypeError(Exception):
@@ -29,8 +38,14 @@ class InvalidPayloadError(Exception):
         self.errors = errors
 
 
-class JobHandlerError(Exception):
-    """Raised by a handler to signal that the job itself failed."""
+@dataclass(frozen=True)
+class JobContext:
+    job_id: uuid.UUID
+    attempt: int
+    session_factory: sessionmaker[Session]
+
+
+HandlerFunc = Callable[[Any, JobContext], dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -38,8 +53,9 @@ class JobHandler:
     name: str
     description: str
     payload_model: type[BaseModel]
-    func: Callable[[Any], dict[str, Any]]
+    func: HandlerFunc
     example: dict[str, Any]
+    default_timeout_seconds: int
 
     def validate(self, payload: dict[str, Any]) -> BaseModel:
         try:
@@ -49,20 +65,31 @@ class JobHandler:
                 self.name, exc.errors(include_url=False, include_context=False)
             ) from exc
 
-    def run(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.func(self.validate(payload))
+    def run(self, payload: dict[str, Any], ctx: JobContext) -> dict[str, Any]:
+        try:
+            model = self.validate(payload)
+        except InvalidPayloadError as exc:
+            # Stored payloads were validated at submit time, so this means the
+            # schema changed underneath an old job. Retrying will not help.
+            raise PermanentJobError(str(exc)) from exc
+        return self.func(model, ctx)
 
 
 REGISTRY: dict[str, JobHandler] = {}
 
 
 def register(
-    name: str, *, payload_model: type[BaseModel], description: str, example: dict[str, Any]
-) -> Callable[[Callable[[Any], dict[str, Any]]], Callable[[Any], dict[str, Any]]]:
-    def decorator(func: Callable[[Any], dict[str, Any]]) -> Callable[[Any], dict[str, Any]]:
+    name: str,
+    *,
+    payload_model: type[BaseModel],
+    description: str,
+    example: dict[str, Any],
+    default_timeout_seconds: int = 60,
+) -> Callable[[HandlerFunc], HandlerFunc]:
+    def decorator(func: HandlerFunc) -> HandlerFunc:
         if name in REGISTRY:
             raise RuntimeError(f"Job type {name!r} registered twice")
-        REGISTRY[name] = JobHandler(name, description, payload_model, func, example)
+        REGISTRY[name] = JobHandler(name, description, payload_model, func, example, default_timeout_seconds)
         return func
 
     return decorator
@@ -80,6 +107,18 @@ def validate_payload(job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     return get_handler(job_type).validate(payload).model_dump(mode="json")
 
 
+def _insert_ignore(session: Session, model: type, values: dict[str, Any], conflict_cols: list[str]):
+    """INSERT ... ON CONFLICT DO NOTHING, for PostgreSQL and SQLite."""
+    dialect = session.get_bind().dialect.name
+    if dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert
+    elif dialect == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert
+    else:  # pragma: no cover
+        return generic_insert(model).values(**values)
+    return insert(model).values(**values).on_conflict_do_nothing(index_elements=conflict_cols)
+
+
 # --------------------------------------------------------------------------- #
 # Payload models
 # --------------------------------------------------------------------------- #
@@ -94,7 +133,7 @@ class EchoPayload(_StrictPayload):
 
 
 class SleepPayload(_StrictPayload):
-    seconds: float = Field(ge=0, le=30, description="How long the worker should sleep.")
+    seconds: float = Field(ge=0, le=300, description="How long the worker should sleep.")
 
 
 class ProcessRecordsPayload(_StrictPayload):
@@ -103,10 +142,26 @@ class ProcessRecordsPayload(_StrictPayload):
     delay_ms: int = Field(
         default=0, ge=0, le=1000, description="Simulated latency per record, in milliseconds."
     )
+    fail_first_attempt_after: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Testing aid: on attempt 1 only, raise a transient error after this many "
+            "records have been stored, to simulate a crash halfway through a batch."
+        ),
+    )
+
+
+class FlakyPayload(_StrictPayload):
+    fail_times: int = Field(ge=0, le=10, description="Fail transiently on the first N attempts.")
 
 
 class AlwaysFailPayload(_StrictPayload):
     reason: str = Field(default="Intentional failure for testing", max_length=500)
+    transient: bool = Field(
+        default=False,
+        description="If true, raise a retryable error (ends in DEAD_LETTER); otherwise permanent (FAILED).",
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -119,83 +174,125 @@ class AlwaysFailPayload(_StrictPayload):
     payload_model=EchoPayload,
     description="Returns the message it was given. Useful as a smoke test.",
     example={"message": "hello flowgrid"},
+    default_timeout_seconds=10,
 )
-def echo(payload: EchoPayload) -> dict[str, Any]:
+def echo(payload: EchoPayload, ctx: JobContext) -> dict[str, Any]:
     return {"echo": payload.message}
 
 
 @register(
     "sleep",
     payload_model=SleepPayload,
-    description="Sleeps for N seconds to simulate a long-running job.",
+    description="Sleeps for N seconds to simulate a long-running job. Pair with timeout_seconds to test timeouts.",
     example={"seconds": 3},
+    default_timeout_seconds=310,
 )
-def sleep(payload: SleepPayload) -> dict[str, Any]:
+def sleep(payload: SleepPayload, ctx: JobContext) -> dict[str, Any]:
     time.sleep(payload.seconds)
     return {"slept_seconds": payload.seconds}
 
 
-class _RecordError(Exception):
-    pass
+@register(
+    "flaky",
+    payload_model=FlakyPayload,
+    description="Fails with a transient error on the first N attempts, then succeeds. Demonstrates retries.",
+    example={"fail_times": 2},
+    default_timeout_seconds=10,
+)
+def flaky(payload: FlakyPayload, ctx: JobContext) -> dict[str, Any]:
+    if ctx.attempt <= payload.fail_times:
+        raise TransientJobError(f"simulated transient failure on attempt {ctx.attempt}")
+    return {"succeeded_on_attempt": ctx.attempt}
 
 
 _TIERS = ("bronze", "silver", "gold")
-
-
-def _validate_record(record_id: int) -> dict[str, Any]:
-    if record_id <= 0:
-        raise _RecordError("record_id must be a positive integer")
-    return {"id": record_id}
-
-
-def _enrich_record(record: dict[str, Any]) -> dict[str, Any]:
-    # Stand-in for a call to an external enrichment API (deterministic, offline).
-    return {**record, "tier": _TIERS[record["id"] % len(_TIERS)]}
-
-
-def _store_record(record: dict[str, Any]) -> None:
-    # Stand-in for persisting the enriched record. Real storage arrives with
-    # idempotent writes in Phase 2.
-    return None
-
-
-def _notify(record: dict[str, Any]) -> None:
-    # Stand-in for sending a notification.
-    return None
+_COMMIT_EVERY = 100
 
 
 @register(
     "process_records",
     payload_model=ProcessRecordsPayload,
     description=(
-        "Simulates the validate → enrich → store → notify pipeline for a batch of "
-        "customer records. Non-positive IDs fail validation individually."
+        "Validate → enrich → store → notify for a batch of customer records. Storage and "
+        "notifications are idempotent, so retries never duplicate them."
     ),
     example={"batch_id": "batch-001", "record_ids": [101, 102, 103], "delay_ms": 200},
+    default_timeout_seconds=300,
 )
-def process_records(payload: ProcessRecordsPayload) -> dict[str, Any]:
-    processed = 0
+def process_records(payload: ProcessRecordsPayload, ctx: JobContext) -> dict[str, Any]:
+    stored = 0
+    notified = 0
+    duplicate_notifications = 0
     failures: list[dict[str, Any]] = []
     tiers: dict[str, int] = {}
+    seen: set[int] = set()
 
-    for record_id in payload.record_ids:
-        try:
-            record = _enrich_record(_validate_record(record_id))
-            _store_record(record)
-            _notify(record)
-        except _RecordError as exc:
-            failures.append({"record_id": record_id, "error": str(exc)})
-        else:
-            processed += 1
-            tiers[record["tier"]] = tiers.get(record["tier"], 0) + 1
-        if payload.delay_ms:
-            time.sleep(payload.delay_ms / 1000)
+    with ctx.session_factory() as db:
+        for i, record_id in enumerate(payload.record_ids, start=1):
+            # 1. validate
+            if record_id <= 0:
+                failures.append({"record_id": record_id, "error": "record_id must be a positive integer"})
+                continue
+            if record_id in seen:
+                continue
+            seen.add(record_id)
+
+            # 2. enrich (stand-in for an external API call; deterministic and offline)
+            tier = _TIERS[record_id % len(_TIERS)]
+
+            # 3. store — keyed by (batch_id, record_id): a re-run overwrites nothing.
+            db.execute(
+                _insert_ignore(
+                    db,
+                    ProcessedRecord,
+                    {"batch_id": payload.batch_id, "record_id": record_id, "tier": tier, "job_id": ctx.job_id},
+                    ["batch_id", "record_id"],
+                )
+            )
+            stored += 1
+            tiers[tier] = tiers.get(tier, 0) + 1
+
+            # 4. notify — the dedupe key makes "send" happen at most once per record.
+            #    RETURNING tells us whether this call inserted the row or the
+            #    conflict skipped it (rowcount is not reliable for this across drivers).
+            inserted = db.execute(
+                _insert_ignore(
+                    db,
+                    Notification,
+                    {
+                        "id": uuid.uuid4(),
+                        "dedupe_key": f"record-processed:{payload.batch_id}:{record_id}",
+                        "job_id": ctx.job_id,
+                        "message": f"Record {record_id} in batch {payload.batch_id} processed ({tier})",
+                    },
+                    ["dedupe_key"],
+                ).returning(Notification.id)
+            ).first()
+            if inserted is not None:
+                notified += 1
+            else:
+                duplicate_notifications += 1
+
+            if i % _COMMIT_EVERY == 0:
+                db.commit()
+            if payload.delay_ms:
+                time.sleep(payload.delay_ms / 1000)
+            if (
+                ctx.attempt == 1
+                and payload.fail_first_attempt_after is not None
+                and stored >= payload.fail_first_attempt_after
+            ):
+                db.commit()  # the work done so far is durable, as in a real crash
+                raise TransientJobError(f"simulated crash after storing {stored} records")
+        db.commit()
 
     return {
         "batch_id": payload.batch_id,
-        "processed": processed,
+        "processed": stored,
         "failed": len(failures),
         "tiers": tiers,
+        "notifications_sent": notified,
+        "notifications_deduplicated": duplicate_notifications,
         # Cap the stored detail so one huge batch cannot bloat the jobs table.
         "failures": failures[:50],
     }
@@ -204,8 +301,11 @@ def process_records(payload: ProcessRecordsPayload) -> dict[str, Any]:
 @register(
     "always_fail",
     payload_model=AlwaysFailPayload,
-    description="Always raises an error. Used to exercise the failure path.",
-    example={"reason": "testing failure handling"},
+    description="Always raises. transient=false → FAILED immediately; transient=true → retried, then DEAD_LETTER.",
+    example={"reason": "testing failure handling", "transient": False},
+    default_timeout_seconds=10,
 )
-def always_fail(payload: AlwaysFailPayload) -> dict[str, Any]:
-    raise JobHandlerError(payload.reason)
+def always_fail(payload: AlwaysFailPayload, ctx: JobContext) -> dict[str, Any]:
+    if payload.transient:
+        raise TransientJobError(payload.reason)
+    raise PermanentJobError(payload.reason)

@@ -4,6 +4,7 @@ x-app-env: &app-env
   DATABASE_URL: postgresql+psycopg://flowgrid:flowgrid@postgres:5432/flowgrid
   REDIS_URL: redis://redis:6379/0
   LOG_LEVEL: INFO
+  LOG_FORMAT: json
 
 services:
   postgres:
@@ -60,6 +61,19 @@ services:
     pull_policy: never
     environment: *app-env
     command: ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  # Recovery loop: expired leases, due retries, outbox relay, key purging.
+  # Safe to scale (`--scale sweeper=2`): every action is a guarded UPDATE.
+  sweeper:
+    image: flowgrid-app:latest
+    pull_policy: never
+    environment: *app-env
+    command: ["python", "-m", "app.sweeper"]
     depends_on:
       migrate:
         condition: service_completed_successfully

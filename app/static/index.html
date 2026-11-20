@@ -8,42 +8,50 @@
   :root {
     --bg: #f6f7f9; --panel: #ffffff; --border: #e3e6eb; --text: #1b1f24; --muted: #667080;
     --accent: #2563eb; --accent-text: #ffffff; --code-bg: #f1f3f6;
-    --pending: #8a8f98; --queued: #b7791f; --running: #2563eb; --succeeded: #15803d; --failed: #c2410c;
+    --pending: #8a8f98; --queued: #b7791f; --running: #2563eb; --retry: #9333ea;
+    --succeeded: #15803d; --failed: #c2410c; --dead: #be123c;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0f1216; --panel: #171b21; --border: #2a3039; --text: #e6e9ee; --muted: #9aa3b0;
       --accent: #4f8cff; --accent-text: #0b0d10; --code-bg: #11151a;
-      --pending: #9aa3b0; --queued: #e0a63a; --running: #4f8cff; --succeeded: #34c27a; --failed: #ff7a45;
+      --pending: #9aa3b0; --queued: #e0a63a; --running: #4f8cff; --retry: #c084fc;
+      --succeeded: #34c27a; --failed: #ff7a45; --dead: #fb7185;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 12px;
-           padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+           padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
   header h1 { margin: 0; font-size: 18px; letter-spacing: -0.01em; }
   header h1 span { color: var(--muted); font-weight: 400; }
+  .hdr-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .health { display: flex; gap: 14px; color: var(--muted); font-size: 13px; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--pending); }
   .dot.ok { background: var(--succeeded); } .dot.bad { background: var(--failed); }
-  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; display: grid; gap: 16px; }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
-  .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-  .stat .value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .auth { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+  .auth input { width: 230px; }
+  main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 40px; display: grid; gap: 16px; }
+  .banner { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+            border-radius: 8px; padding: 12px 14px; }
+  .banner code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .stat .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .grid { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
-  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .auth input { width: 160px; } }
   .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
   .panel h2 { margin: 0 0 12px; font-size: 15px; }
   label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
   select, textarea, input { width: 100%; font: inherit; color: var(--text); background: var(--bg);
                             border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; }
-  textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; min-height: 140px; resize: vertical; }
+  textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; min-height: 130px; resize: vertical; }
   .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
-  .row { display: flex; gap: 8px; align-items: end; }
+  .row { display: flex; gap: 8px; align-items: end; } .row > div { flex: 1; }
   button { font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text);
-           border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+           border-radius: 6px; padding: 7px 12px; cursor: pointer; white-space: nowrap; }
   button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
   button:disabled { opacity: .5; cursor: default; }
   .msg { margin-top: 10px; font-size: 13px; min-height: 1.2em; word-break: break-word; }
@@ -52,33 +60,46 @@
   .toolbar select { width: auto; }
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
   th { color: var(--muted); font-weight: 500; font-size: 12px; }
-  tbody tr { cursor: pointer; } tbody tr:hover { background: var(--bg); }
-  tbody tr.selected { background: var(--code-bg); }
+  #jobs-body tr { cursor: pointer; } #jobs-body tr:hover { background: var(--bg); }
+  #jobs-body tr.selected { background: var(--code-bg); }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
-           border: 1px solid currentColor; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid currentColor; }
   .s-PENDING { color: var(--pending); } .s-QUEUED { color: var(--queued); } .s-RUNNING { color: var(--running); }
-  .s-SUCCEEDED { color: var(--succeeded); } .s-FAILED { color: var(--failed); }
+  .s-RETRY_SCHEDULED { color: var(--retry); } .s-SUCCEEDED { color: var(--succeeded); }
+  .s-FAILED, .s-TIMED_OUT { color: var(--failed); } .s-DEAD_LETTER, .s-LOST { color: var(--dead); }
   .pager { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: var(--muted); font-size: 12.5px; }
   .empty { color: var(--muted); text-align: center; padding: 24px; }
   pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px;
-        overflow: auto; font-size: 12px; margin: 4px 0 12px; max-height: 260px; }
+        overflow: auto; font-size: 12px; margin: 4px 0 12px; max-height: 240px; white-space: pre-wrap; }
   dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 12px; font-size: 13px; }
   dt { color: var(--muted); } dd { margin: 0; word-break: break-all; }
+  .detail-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 </style>
 </head>
 <body>
 <header>
   <h1>FlowGrid <span>· Job dashboard</span></h1>
-  <div class="health">
-    <span><i class="dot" id="h-db"></i>PostgreSQL</span>
-    <span><i class="dot" id="h-redis"></i>Redis</span>
+  <div class="hdr-right">
+    <form class="auth" id="auth-form">
+      <span id="whoami">API key</span>
+      <input id="api-key" type="password" placeholder="fg_…" autocomplete="off" aria-label="API key" />
+      <button type="submit">Use key</button>
+    </form>
+    <div class="health">
+      <span><i class="dot" id="h-db"></i>PostgreSQL</span>
+      <span><i class="dot" id="h-redis"></i>Redis</span>
+    </div>
   </div>
 </header>
 
 <main>
+  <div class="banner" id="auth-banner" hidden>
+    Paste an API key above to see and submit jobs. Create one with <code>make api-key NAME=dashboard</code>.
+    It is kept only in this browser's local storage.
+  </div>
+
   <section class="stats" id="stats"></section>
 
   <div class="grid">
@@ -91,10 +112,13 @@
         <label for="payload">Payload (JSON)</label>
         <textarea id="payload" spellcheck="false"></textarea>
         <div class="row">
-          <div style="flex:0 0 90px">
-            <label for="count">Copies</label>
-            <input id="count" type="number" min="1" max="50" value="1" />
-          </div>
+          <div><label for="max-attempts">Max attempts</label><input id="max-attempts" type="number" min="1" max="10" placeholder="3" /></div>
+          <div><label for="timeout">Timeout (s)</label><input id="timeout" type="number" min="1" max="600" placeholder="default" /></div>
+        </div>
+        <label for="idem">Idempotency-Key (optional)</label>
+        <input id="idem" placeholder="e.g. invoice-42" maxlength="255" />
+        <div class="row">
+          <div style="flex:0 0 80px"><label for="count">Copies</label><input id="count" type="number" min="1" max="50" value="1" /></div>
           <button class="primary" type="submit" id="submit-btn" style="flex:1">Submit</button>
         </div>
         <div class="msg" id="submit-msg"></div>
@@ -104,11 +128,7 @@
     <section class="panel">
       <div class="toolbar">
         <h2 style="margin:0">Jobs</h2>
-        <select id="status-filter" aria-label="Filter by status">
-          <option value="">All statuses</option>
-          <option>PENDING</option><option>QUEUED</option><option>RUNNING</option>
-          <option>SUCCEEDED</option><option>FAILED</option>
-        </select>
+        <select id="status-filter" aria-label="Filter by status"><option value="">All statuses</option></select>
       </div>
       <div class="table-wrap">
         <table>
@@ -124,22 +144,28 @@
   </div>
 
   <section class="panel" id="detail" hidden>
-    <h2>Job detail</h2>
+    <div class="detail-head"><h2 style="margin:0">Job detail</h2><span id="detail-actions"></span></div>
     <div id="detail-body"></div>
   </section>
 </main>
 
 <script>
 const PAGE = 15;
-const STATUSES = ["PENDING", "QUEUED", "RUNNING", "SUCCEEDED", "FAILED"];
-let jobTypes = [], offset = 0, selectedId = null;
+const STATUSES = ["PENDING", "QUEUED", "RUNNING", "RETRY_SCHEDULED", "SUCCEEDED", "FAILED", "DEAD_LETTER"];
+const KEY_STORE = "flowgrid.apiKey";
+let jobTypes = [], offset = 0, selectedId = null, apiKey = "";
 const $ = (id) => document.getElementById(id);
 
-async function api(path, opts) {
-  const res = await fetch(path, opts);
+try { apiKey = localStorage.getItem(KEY_STORE) || ""; } catch {}
+
+async function api(path, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+  const res = await fetch(path, { ...opts, headers });
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { body });
-  return body;
+  if (res.status === 401) showAuthNeeded();
+  if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status, body });
+  return { body, res };
 }
 
 function el(tag, attrs = {}, ...children) {
@@ -151,21 +177,42 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-const badge = (s) => el("span", { class: `badge s-${s}` }, s);
+const badge = (s) => el("span", { class: `badge s-${s}` }, s.replace("_", " "));
 const fmtTime = (t) => t ? new Date(t).toLocaleTimeString() : "—";
 const fmtDur = (ms) => ms == null ? "—" : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+const errText = (err) => {
+  const d = err.body?.detail;
+  if (err.status === 429) return "Rate limited — slow down and try again shortly.";
+  if (typeof d === "string") return d;
+  if (d?.errors) return `${d.message}: ` + d.errors.map((x) => `${x.loc.join(".") || "payload"} — ${x.msg}`).join("; ");
+  return d?.message ?? err.message;
+};
+
+function showAuthNeeded() { $("auth-banner").hidden = false; $("whoami").textContent = "API key"; }
+
+async function loadMe() {
+  if (!apiKey) return showAuthNeeded();
+  try {
+    const { body } = await api("/api/v1/me");
+    $("auth-banner").hidden = true;
+    $("whoami").textContent = `Using ${body.name} (${body.prefix}…)`;
+    $("api-key").value = "";
+    return true;
+  } catch { return false; }
+}
 
 async function loadJobTypes() {
-  jobTypes = await api("/api/v1/job-types");
-  const sel = $("job-type");
-  sel.replaceChildren(...jobTypes.map((t) => el("option", { value: t.name }, t.name)));
+  try {
+    ({ body: jobTypes } = await api("/api/v1/job-types"));
+  } catch { return; }
+  $("job-type").replaceChildren(...jobTypes.map((t) => el("option", { value: t.name }, t.name)));
   onTypeChange();
 }
 
 function onTypeChange() {
   const t = jobTypes.find((x) => x.name === $("job-type").value);
   if (!t) return;
-  $("job-desc").textContent = t.description;
+  $("job-desc").textContent = `${t.description} (default timeout ${t.default_timeout_seconds}s)`;
   $("payload").value = JSON.stringify(t.example, null, 2);
 }
 
@@ -175,41 +222,43 @@ async function submitJob(e) {
   let payload;
   try { payload = JSON.parse($("payload").value || "{}"); }
   catch { msg.className = "msg err"; msg.textContent = "Payload is not valid JSON."; return; }
+  const body = { type: $("job-type").value, payload };
+  if ($("max-attempts").value) body.max_attempts = parseInt($("max-attempts").value, 10);
+  if ($("timeout").value) body.timeout_seconds = parseInt($("timeout").value, 10);
+  const headers = { "Content-Type": "application/json" };
+  if ($("idem").value.trim()) headers["Idempotency-Key"] = $("idem").value.trim();
   const count = Math.min(50, Math.max(1, parseInt($("count").value, 10) || 1));
+
   $("submit-btn").disabled = true;
   try {
-    let last;
+    let last, replayed = false;
     for (let i = 0; i < count; i++) {
-      last = await api("/api/v1/jobs", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: $("job-type").value, payload }),
-      });
+      const r = await api("/api/v1/jobs", { method: "POST", headers, body: JSON.stringify(body) });
+      last = r.body; replayed = r.res.headers.get("Idempotent-Replayed") === "true";
     }
     msg.className = "msg ok";
-    msg.textContent = count === 1 ? `Accepted job ${last.job_id.slice(0, 8)}…` : `Accepted ${count} jobs.`;
+    msg.textContent = replayed ? `Idempotent replay: returned existing job ${last.job_id.slice(0, 8)}…`
+      : count === 1 ? `Accepted job ${last.job_id.slice(0, 8)}… (${last.status})` : `Accepted ${count} jobs.`;
     selectedId = last.job_id; offset = 0;
     refresh();
   } catch (err) {
-    msg.className = "msg err";
-    const d = err.body?.detail;
-    msg.textContent = typeof d === "string" ? d
-      : d?.errors ? `${d.message}: ` + d.errors.map((x) => `${x.loc.join(".") || "payload"} — ${x.msg}`).join("; ")
-      : d?.message ?? err.message;
+    msg.className = "msg err"; msg.textContent = errText(err);
   } finally { $("submit-btn").disabled = false; }
 }
 
 async function loadStats() {
-  const s = await api("/api/v1/jobs/stats");
+  const { body: s } = await api("/api/v1/jobs/stats");
   const cards = [["Total", s.total], ...STATUSES.map((k) => [k, s.by_status[k] ?? 0])];
   $("stats").replaceChildren(...cards.map(([label, value]) =>
-    el("div", { class: "stat" }, el("div", { class: `label ${label === "Total" ? "" : "s-" + label}` }, label), el("div", { class: "value" }, String(value)))));
+    el("div", { class: "stat" }, el("div", { class: `label ${label === "Total" ? "" : "s-" + label}` }, label.replace("_", " ")),
+      el("div", { class: "value" }, String(value)))));
 }
 
 async function loadJobs() {
   const status = $("status-filter").value;
   const q = new URLSearchParams({ limit: PAGE, offset });
   if (status) q.set("status", status);
-  const data = await api(`/api/v1/jobs?${q}`);
+  const { body: data } = await api(`/api/v1/jobs?${q}`);
   const body = $("jobs-body");
   if (!data.items.length) {
     body.replaceChildren(el("tr", {}, el("td", { colspan: 7, class: "empty" }, "No jobs yet — submit one on the left.")));
@@ -219,7 +268,7 @@ async function loadJobs() {
         onclick: () => { selectedId = j.job_id; refresh(); },
       },
       el("td", { class: "mono" }, j.job_id.slice(0, 8)), el("td", {}, j.type), el("td", {}, badge(j.status)),
-      el("td", {}, String(j.attempts)), el("td", {}, fmtTime(j.created_at)), el("td", {}, fmtDur(j.duration_ms)),
+      el("td", {}, `${j.attempts}/${j.max_attempts}`), el("td", {}, fmtTime(j.created_at)), el("td", {}, fmtDur(j.duration_ms)),
       el("td", { class: "mono" }, j.worker_id ?? "—"))));
   }
   const end = Math.min(offset + PAGE, data.total);
@@ -228,40 +277,69 @@ async function loadJobs() {
   $("next").disabled = end >= data.total;
 }
 
+async function replay(jobId) {
+  try {
+    const { body } = await api(`/api/v1/jobs/${jobId}/replay`, { method: "POST" });
+    selectedId = body.job_id; offset = 0; refresh();
+  } catch (err) { alert(errText(err)); }
+}
+
 async function loadDetail() {
   if (!selectedId) return;
-  const j = await api(`/api/v1/jobs/${selectedId}`);
-  const rows = [["Job ID", j.job_id], ["Type", j.type], ["Status", badge(j.status)], ["Attempts", String(j.attempts)],
-    ["Worker", j.worker_id ?? "—"], ["Created", j.created_at], ["Queued", j.queued_at ?? "—"],
-    ["Started", j.started_at ?? "—"], ["Finished", j.finished_at ?? "—"], ["Duration", fmtDur(j.duration_ms)]];
+  const [{ body: j }, { body: attempts }] = await Promise.all([
+    api(`/api/v1/jobs/${selectedId}`), api(`/api/v1/jobs/${selectedId}/attempts`)]);
+  const rows = [["Job ID", j.job_id], ["Type", j.type], ["Status", badge(j.status)],
+    ["Attempts", `${j.attempts} of ${j.max_attempts}`], ["Timeout", `${j.timeout_seconds}s per attempt`],
+    ["Worker", j.worker_id ?? "—"], ["Created", j.created_at], ["Started", j.started_at ?? "—"],
+    ["Finished", j.finished_at ?? "—"], ["Duration", fmtDur(j.duration_ms)]];
+  if (j.next_attempt_at) rows.push(["Next attempt", j.next_attempt_at]);
+  if (j.replay_of) rows.push(["Replay of", j.replay_of]);
   const parts = [el("dl", {}, ...rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", { class: "mono" }, v)]))];
+  if (attempts.length) {
+    parts.push(el("label", {}, "Attempt history"), el("div", { class: "table-wrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, ...["#", "Status", "Worker", "Duration", "Error"].map((h) => el("th", {}, h)))),
+      el("tbody", {}, ...attempts.map((a) => el("tr", {},
+        el("td", {}, String(a.attempt_number)), el("td", {}, badge(a.status)), el("td", { class: "mono" }, a.worker_id ?? "—"),
+        el("td", {}, fmtDur(a.duration_ms)), el("td", { class: "mono" }, a.error ?? "")))))));
+  }
   parts.push(el("label", {}, "Payload"), el("pre", {}, JSON.stringify(j.payload, null, 2)));
   if (j.result) parts.push(el("label", {}, "Result"), el("pre", {}, JSON.stringify(j.result, null, 2)));
-  if (j.error) parts.push(el("label", {}, "Error"), el("pre", { class: "s-FAILED" }, j.error));
+  if (j.error) parts.push(el("label", {}, "Last error"), el("pre", { class: "s-FAILED" }, j.error));
   $("detail-body").replaceChildren(...parts);
+  $("detail-actions").replaceChildren(...(["FAILED", "DEAD_LETTER"].includes(j.status)
+    ? [el("button", { onclick: () => replay(j.job_id) }, "Replay as new job")] : []));
   $("detail").hidden = false;
 }
 
 async function loadHealth() {
   try {
-    const res = await fetch("/health"); const h = await res.json();
+    const h = await (await fetch("/health")).json();
     $("h-db").className = "dot " + (h.database === "ok" ? "ok" : "bad");
     $("h-redis").className = "dot " + (h.redis === "ok" ? "ok" : "bad");
   } catch { $("h-db").className = $("h-redis").className = "dot bad"; }
 }
 
 async function refresh() {
-  try { await Promise.all([loadStats(), loadJobs(), loadDetail()]); } catch (e) { console.error(e); }
+  if (!apiKey) return;
+  try { await Promise.all([loadStats(), loadJobs(), loadDetail()]); } catch (e) { console.warn(e.message); }
 }
 
+$("status-filter").append(...STATUSES.map((s) => el("option", { value: s }, s.replace("_", " "))));
+$("auth-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  apiKey = $("api-key").value.trim();
+  try { localStorage.setItem(KEY_STORE, apiKey); } catch {}
+  if (await loadMe()) { loadJobTypes(); refresh(); }
+});
 $("job-type").addEventListener("change", onTypeChange);
 $("submit-form").addEventListener("submit", submitJob);
 $("status-filter").addEventListener("change", () => { offset = 0; refresh(); });
 $("prev").addEventListener("click", () => { offset = Math.max(0, offset - PAGE); refresh(); });
 $("next").addEventListener("click", () => { offset += PAGE; refresh(); });
 
-loadJobTypes(); refresh(); loadHealth();
-setInterval(refresh, 2000);       // Phase 1 polls; live updates (SSE) come in Phase 3.
+loadHealth();
+loadMe().then((ok) => { if (ok) { loadJobTypes(); refresh(); } });
+setInterval(refresh, 2000);       // polling; live updates (SSE) arrive in Phase 3
 setInterval(loadHealth, 10000);
 </script>
 </body>

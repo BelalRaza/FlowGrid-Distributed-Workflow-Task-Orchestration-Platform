@@ -2,7 +2,6 @@ import uuid
 
 from sqlalchemy import func, select
 
-from app.api.deps import get_publisher
 from app.db.models import Job
 
 
@@ -25,9 +24,19 @@ def test_submit_job_runs_to_success(client):
     assert job["result"] == {"echo": "hi"}
     assert job["error"] is None
     assert job["attempts"] == 1
+    assert job["max_attempts"] == 3
+    assert job["timeout_seconds"] == 10  # echo's default
     assert job["worker_id"]
     assert job["started_at"] and job["finished_at"]
     assert job["duration_ms"] is not None and job["duration_ms"] >= 0
+
+
+def test_submit_with_custom_attempts_and_timeout(client):
+    res = client.post(
+        "/api/v1/jobs", json={"type": "echo", "payload": {"message": "x"}, "max_attempts": 5, "timeout_seconds": 2}
+    )
+    body = res.json()
+    assert body["max_attempts"] == 5 and body["timeout_seconds"] == 2
 
 
 def test_process_records_reports_per_record_failures(client):
@@ -47,23 +56,29 @@ def test_payload_defaults_are_persisted(client):
         "/api/v1/jobs",
         json={"type": "process_records", "payload": {"batch_id": "b1", "record_ids": [1]}},
     )
-    assert res.json()["payload"] == {"batch_id": "b1", "record_ids": [1], "delay_ms": 0}
+    assert res.json()["payload"] == {
+        "batch_id": "b1",
+        "record_ids": [1],
+        "delay_ms": 0,
+        "fail_first_attempt_after": None,
+    }
 
 
 # --------------------------------------------------------------------------- #
-# Failure paths
+# Validation
 # --------------------------------------------------------------------------- #
 
 
-def test_failing_job_is_recorded_as_failed(client):
+def test_permanent_failure_is_not_retried(client):
     res = client.post("/api/v1/jobs", json={"type": "always_fail", "payload": {"reason": "boom"}})
     assert res.status_code == 202
 
     job = client.get(f"/api/v1/jobs/{res.json()['job_id']}").json()
     assert job["status"] == "FAILED"
-    assert job["error"] == "JobHandlerError: boom"
+    assert job["error"] == "PermanentJobError: boom"
     assert job["result"] is None
     assert job["attempts"] == 1
+    assert job["next_attempt_at"] is None
     assert job["finished_at"] is not None
 
 
@@ -77,36 +92,25 @@ def test_unknown_job_type_is_rejected_without_creating_a_job(client, db):
 def test_invalid_payload_is_rejected_without_creating_a_job(client, db):
     res = client.post("/api/v1/jobs", json={"type": "echo", "payload": {"msg": "typo"}})
     assert res.status_code == 422
-    errors = res.json()["detail"]["errors"]
-    locs = {tuple(e["loc"]) for e in errors}
+    locs = {tuple(e["loc"]) for e in res.json()["detail"]["errors"]}
     assert ("message",) in locs  # required field missing
     assert ("msg",) in locs  # unknown field rejected (extra="forbid")
     assert _count_jobs(db) == 0
 
 
-def test_out_of_range_payload_is_rejected(client):
-    res = client.post("/api/v1/jobs", json={"type": "sleep", "payload": {"seconds": 9999}})
-    assert res.status_code == 422
+def test_out_of_range_values_are_rejected(client):
+    assert client.post("/api/v1/jobs", json={"type": "sleep", "payload": {"seconds": 9999}}).status_code == 422
+    assert client.post(
+        "/api/v1/jobs", json={"type": "echo", "payload": {"message": "x"}, "max_attempts": 0}
+    ).status_code == 422
+    assert client.post(
+        "/api/v1/jobs", json={"type": "echo", "payload": {"message": "x"}, "timeout_seconds": 100000}
+    ).status_code == 422
 
 
 def test_unknown_top_level_field_is_rejected(client):
     res = client.post("/api/v1/jobs", json={"type": "echo", "payload": {"message": "x"}, "priority": 1})
     assert res.status_code == 422
-
-
-def test_broker_outage_marks_job_failed_and_returns_503(app, client):
-    def broken_publisher(job_id):
-        raise ConnectionError("redis down")
-
-    app.dependency_overrides[get_publisher] = lambda: broken_publisher
-    res = client.post("/api/v1/jobs", json={"type": "echo", "payload": {"message": "x"}})
-    assert res.status_code == 503
-    job_id = res.json()["detail"]["job_id"]
-
-    job = client.get(f"/api/v1/jobs/{job_id}").json()
-    assert job["status"] == "FAILED"
-    assert job["error"].startswith("Enqueue failed: ConnectionError")
-    assert job["attempts"] == 0  # never reached a worker
 
 
 def test_get_unknown_job_returns_404(client):
@@ -145,32 +149,40 @@ def test_list_jobs_rejects_bad_query(client):
 def test_stats_counts_by_status(client):
     client.post("/api/v1/jobs", json={"type": "echo", "payload": {"message": "a"}})
     client.post("/api/v1/jobs", json={"type": "always_fail", "payload": {}})
+    client.post("/api/v1/jobs", json={"type": "flaky", "payload": {"fail_times": 1}})
 
     stats = client.get("/api/v1/jobs/stats").json()
-    assert stats["total"] == 2
+    assert stats["total"] == 3
     assert stats["by_status"]["SUCCEEDED"] == 1
     assert stats["by_status"]["FAILED"] == 1
-    assert stats["by_status"]["QUEUED"] == 0
+    assert stats["by_status"]["RETRY_SCHEDULED"] == 1
+    assert stats["by_status"]["DEAD_LETTER"] == 0
 
 
 def test_job_types_lists_allow_list_with_schemas(client):
     types = {t["name"]: t for t in client.get("/api/v1/job-types").json()}
-    assert {"echo", "sleep", "process_records", "always_fail"} <= set(types)
+    assert {"echo", "sleep", "flaky", "process_records", "always_fail"} <= set(types)
     assert "message" in types["echo"]["payload_schema"]["properties"]
+    assert types["process_records"]["default_timeout_seconds"] == 300
 
 
-def test_health_reports_dependencies(client, monkeypatch):
+def test_whoami(client):
+    me = client.get("/api/v1/me").json()
+    assert me["name"] == "test-client" and me["prefix"].startswith("fg_")
+
+
+def test_health_reports_dependencies(anon_client, monkeypatch):
     from app.api import health
 
     monkeypatch.setattr(health, "check_redis", lambda: True)
-    assert client.get("/health").json() == {"status": "ok", "database": "ok", "redis": "ok"}
+    assert anon_client.get("/health").json() == {"status": "ok", "database": "ok", "redis": "ok"}
 
     monkeypatch.setattr(health, "check_redis", lambda: False)
-    res = client.get("/health")
+    res = anon_client.get("/health")
     assert res.status_code == 503 and res.json()["redis"] == "unavailable"
 
 
-def test_dashboard_is_served(client):
-    res = client.get("/")
+def test_dashboard_is_served_without_auth(anon_client):
+    res = anon_client.get("/")
     assert res.status_code == 200
     assert "FlowGrid" in res.text
